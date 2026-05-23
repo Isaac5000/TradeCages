@@ -1,0 +1,12 @@
+{
+  "itemGroup.tradecages": "Jaulas de Comercio",
+  "block.tradecages.trade_cage": "Jaula de Comercio",
+  "item.tradecages.villager_capturer": "Capturador de Aldeanos",
+
+  "tradecages.configuration.title": "Configuración de Jaulas de Comercio",
+  "tradecages.configuration.section.tradecages.common.toml": "Configuración de Jaulas de Comercio",
+  "tradecages.configuration.section.tradecages.common.toml.title": "Configuración de Jaulas de Comercio",
+
+  "villager.baby": "%s Bebé"
+}
+

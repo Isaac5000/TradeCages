@@ -1,12 +1,12 @@
 package com.example.examplemod.platform.neoforge.event;
 import com.example.examplemod.feature.tradecages.adapters.input.TradeCageBlock;
+import com.example.examplemod.feature.tradecages.adapters.input.VillagerCapturerItem;
 import com.example.examplemod.feature.tradecages.adapters.output.TradeCageRegistrationAdapter;
 import com.example.examplemod.platform.neoforge.bootstrap.ExampleMod;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -37,44 +37,20 @@ public final class NeoForgeEventAdapter {
         if (!event.getEntity().isShiftKeyDown()) {
             return;
         }
-        if (!TradeCageRegistrationAdapter.CAPTURE_VILLAGER_USE_CASE.hasCapacity()) {
-            event.getEntity().sendSystemMessage(Component.literal("La caja esta llena."));
+        ItemStack heldItem = event.getEntity().getItemInHand(event.getHand());
+        if (!heldItem.is(TradeCageRegistrationAdapter.VILLAGER_CAPTURER_ITEM.get())) {
+            return;
+        }
+        if (VillagerCapturerItem.hasCapturedVillager(heldItem)) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
             return;
         }
-        Inventory inventory = event.getEntity().getInventory();
-        int freeSlot = inventory.getFreeSlot();
-        if (freeSlot < 0) {
-            event.getEntity().sendSystemMessage(Component.literal("No tienes espacio en el inventario."));
-            return;
-        }
-        if (!consumeOneTradeCage(inventory)) {
-            event.getEntity().sendSystemMessage(Component.literal("Necesitas una Trade Cage vacia."));
-            return;
-        }
-        boolean captured = TradeCageRegistrationAdapter.CAPTURE_VILLAGER_USE_CASE.captureVillager(villager);
-        if (!captured) {
+        if (!VillagerCapturerItem.captureVillager(heldItem, villager)) {
             return;
         }
         villager.discard();
-        ItemStack capturedStack = new ItemStack(TradeCageRegistrationAdapter.CAPTURED_VILLAGER_ITEM.get());
-        inventory.add(capturedStack);
-        event.getEntity().sendSystemMessage(Component.literal("Aldeano capturado."));
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
-    }
-    private static boolean consumeOneTradeCage(Inventory inventory) {
-        // Use public Inventory API instead of accessing the private `items` field.
-        // Iterate over the main inventory slots (0..35).
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(TradeCageRegistrationAdapter.TRADE_CAGE_ITEM.get()) && stack.getCount() > 0) {
-                // Remove one from the slot using the Inventory API to ensure internal state stays consistent.
-                inventory.removeItem(i, 1);
-                return true;
-            }
-        }
-        return false;
     }
 }

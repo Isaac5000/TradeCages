@@ -1,5 +1,11 @@
 ﻿{
   "itemGroup.tradecages": "Trade Cages",
   "block.tradecages.trade_cage": "Trade Cage",
-  "item.tradecages.captured_villager": "Captured Villager"
+  "item.tradecages.villager_capturer": "Villager Capturer",
+
+  "tradecages.configuration.title": "Trade Cages Configs",
+  "tradecages.configuration.section.tradecages.common.toml": "Trade Cages Configs",
+  "tradecages.configuration.section.tradecages.common.toml.title": "Trade Cages Configs",
+
+  "villager.baby": "Baby %s"
 }
