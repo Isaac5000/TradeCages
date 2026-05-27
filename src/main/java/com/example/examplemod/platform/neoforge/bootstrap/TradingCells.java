@@ -7,15 +7,14 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.common.NeoForge;
 
 @SuppressWarnings("java:S1118") // Fake
-@Mod(ExampleMod.MOD_ID)
-public class ExampleMod {
-    public static final String MOD_ID = "tradecages";
+@Mod(TradingCells.MOD_ID)
+public class TradingCells {
+    public static final String MOD_ID = "trading_cells";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public ExampleMod(IEventBus modEventBus, ModContainer modContainer) {
+    public TradingCells(IEventBus modEventBus, ModContainer modContainer) {
         // 1. Initialize Registries (Output Adapters to Minecraft)
         Registration.init(modEventBus);
 

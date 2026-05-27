@@ -1,0 +1,15 @@
+{
+  "itemGroup.trading_cells": "Jaulas de Comercio",
+  "block.trading_cells.villager_trading_cell": "Jaula de Comercio",
+  "item.trading_cells.villager_capturer": "Capturador de Aldeanos",
+  "item.trading_cells.piglin_capturer": "Capturador de Piglins",
+
+  "trading_cells.configuration.title": "Configuración de Jaulas de Comercio",
+  "trading_cells.configuration.section.trading_cells.common.toml": "Configuración de Jaulas de Comercio",
+  "trading_cells.configuration.section.trading_cells.common.toml.title": "Configuración de Jaulas de Comercio",
+
+  "villager.baby": "%s Bebé",
+  "piglin.baby": "%s Bebé"
+}
+
+

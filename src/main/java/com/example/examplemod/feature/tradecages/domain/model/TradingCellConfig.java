@@ -1,6 +1,6 @@
 package com.example.examplemod.feature.tradecages.domain.model;
 
-public record TradeCageConfig(
+public record TradingCellConfig(
         int maxVillagers,
         int minCaptureDistance,
         int maxCaptureDistance,

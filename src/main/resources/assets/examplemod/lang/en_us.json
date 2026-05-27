@@ -1,8 +1,0 @@
-{
-  "itemGroup.tradecages": "Trade Cages",
-  "block.tradecages.trade_cage": "Trade Cage",
-
-  "tradecages.configuration.title": "Trade Cages Configs",
-  "tradecages.configuration.section.tradecages.common.toml": "Trade Cages Configs",
-  "tradecages.configuration.section.tradecages.common.toml.title": "Trade Cages Configs"
-}

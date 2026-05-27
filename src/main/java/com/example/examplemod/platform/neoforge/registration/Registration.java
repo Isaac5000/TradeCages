@@ -1,7 +1,7 @@
 package com.example.examplemod.platform.neoforge.registration;
 
-import com.example.examplemod.feature.tradecages.adapters.output.TradeCageRegistrationAdapter;
-import com.example.examplemod.platform.neoforge.bootstrap.ExampleMod;
+import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
+import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.bus.api.IEventBus;
@@ -11,9 +11,9 @@ public class Registration {
 
     private Registration() {}
 
-    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(ExampleMod.MOD_ID);
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(ExampleMod.MOD_ID);
-    public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, ExampleMod.MOD_ID);
+    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(TradingCells.MOD_ID);
+    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(TradingCells.MOD_ID);
+    public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, TradingCells.MOD_ID);
 
     public static void init(IEventBus modEventBus) {
         BLOCKS.register(modEventBus);
@@ -24,6 +24,6 @@ public class Registration {
     }
 
     private static void loadFeatures() {
-        TradeCageRegistrationAdapter.load();
+        TradingCellsRegistrationAdapter.load();
     }
 }

@@ -1,7 +1,7 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "tradecages:item/villager_capturer"
+    "layer0": "trading_cells:item/piglin_capturer"
   }
 }
 

@@ -1,203 +1,429 @@
 package com.example.examplemod.feature.tradecages.adapters.output.client;
 
 import com.example.examplemod.feature.tradecages.adapters.input.VillagerCapturerItem;
+import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
+import com.mojang.math.Axis;
+
+import java.util.EnumMap;
+import java.util.Map;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-
-import java.lang.reflect.Method;
+import com.mojang.serialization.MapCodec;
+import net.minecraft.client.renderer.special.SpecialModelRenderer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
+import org.jspecify.annotations.NonNull;
 
 public final class VillagerCapturerItemRenderSupport {
-    private static final VillagerCapturerRenderBackend RENDER_BACKEND = new MinecraftVillagerCapturerRenderBackend();
+    // Use the concrete backend directly to reduce indirection; interface was unnecessary
+    // for the current codebase and removed to simplify the class count.
+    private static final MinecraftVillagerCapturerRenderBackend RENDER_BACKEND = new MinecraftVillagerCapturerRenderBackend();
+
+    public enum SpecialProfile {
+        DEFAULT,
+        GUI,
+        FIXED,
+        ON_SHELF,
+        THIRD_PERSON,
+        FIRST_PERSON
+    }
 
     private VillagerCapturerItemRenderSupport() {
     }
 
-    public static boolean renderVillager(ItemStack stack, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) {
-        return renderVillager(stack, ItemDisplayContext.FIRST_PERSON_RIGHT_HAND, poseStack, bufferSource, packedLight, 0, partialTick);
+    // Minimal renderer: no runtime flags or fallback. Only required code remains.
+
+    // Transform descriptor grouped by profile so values are easy to find and change.
+    // Use a compact record for the transform; accessors are .scale(), .x(), .y(), .z(), .rotX(), .rotY(), .rotZ()
+    public record Transform(float scale, double x, double y, double z, float rotX, float rotY, float rotZ) {}
+
+    // ---------------------------------------------------------------------
+    // TRANSFORMS: central place for all scale/translation/rotation values
+    // Edit these values to change how captured villagers are scaled/positioned
+    // in each display context (GUI, first/third person, fixed/item-frame, on_shelf).
+    // This is the easiest place to find and tune scale & rotation.
+    // ---------------------------------------------------------------------
+    private static final Map<SpecialProfile, Transform> TRANSFORMS = new EnumMap<>(SpecialProfile.class);
+
+    // No per-species transforms in minimal implementation
+
+    static {
+        TRANSFORMS.put(SpecialProfile.FIRST_PERSON,
+                new Transform(0.5F,
+                2.0D, 0.0D, 0.0D,
+                -5.0F, 320.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.THIRD_PERSON,
+                new Transform(0.26F,
+                        1.7D, 1.7D, 2.2D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.GUI,
+                new Transform(0.4F,
+                        1.20D, 0.2D, 0.0D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.FIXED,
+                new Transform(0.4F,
+                        1.2D, 0.0D, 1.2D,
+                        0.0F, 180.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.ON_SHELF,
+                new Transform(0.80F,
+                        0.6D, -0.4D, 0.5D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.DEFAULT,
+                new Transform(0.45F,
+                        1.1D, 0.0D, 1.2D,
+                        0.0F, 180.0F, 0.0F));
     }
 
-    public static boolean renderVillager(ItemStack stack, ItemDisplayContext displayContext, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, int packedOverlay, float partialTick) {
+    // getProfileTransform intentionally removed to reduce public surface; use TRANSFORMS directly
+
+    // Runtime tuning helper removed to keep the API minimal. Reintroduce if you need live tweaking.
+
+
+    // Convenience overloads removed to reduce unused public surface area. Use
+    // renderVillager(..., ItemDisplayContext, ...) or renderVillager(..., ItemDisplayContext, PoseStack, MultiBufferSource, ...) instead.
+
+    // Public convenience method removed; internal render entry via renderVillagerInternal and
+    // renderVillagerSpecial remains. If external callers require this exact signature,
+    // we can restore it, but currently it's unused.
+
+    /**
+     * Render usado por los item models "minecraft:special".
+     * Permite perfilar el ajuste base (por ejemplo, 1ª persona vs el resto).
+     */
+    public static boolean renderVillagerSpecial(ItemStack stack, PoseStack poseStack, Object renderOutput, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
+        RenderParams params = new RenderParams(null, poseStack, renderOutput, packedLight, packedOverlay, partialTick, profile);
+        return renderVillagerInternal(stack, params);
+    }
+
+    // Parameter object to avoid long parameter lists and group rendering parameters.
+        private record RenderParams(ItemDisplayContext displayContext,
+                                    PoseStack poseStack,
+                                    Object renderOutput,
+                                    int packedLight,
+                                    int packedOverlay,
+                                    float partialTick,
+                                    SpecialProfile specialProfile) {
+    }
+
+    private static boolean renderVillagerInternal(ItemStack stack, RenderParams params) {
+        ItemDisplayContext displayContext = params.displayContext;
+        PoseStack poseStack = params.poseStack;
+        Object renderOutput = params.renderOutput;
+        float partialTick = params.partialTick;
+        SpecialProfile specialProfile = params.specialProfile;
         Level level = Minecraft.getInstance().level;
-        if (level == null || !VillagerCapturerItem.hasCapturedVillager(stack)) {
+        if (level == null) {
+            TradingCells.LOGGER.debug("[VillagerCapturer] Nivel nulo, no se puede renderizar aldeano.");
+            return false;
+        }
+        if (!VillagerCapturerItem.hasCapturedVillager(stack)) {
+            // No hay aldeano: mantener render vanilla del item
+            TradingCells.LOGGER.trace("[VillagerCapturer] No hay aldeano capturado en el item.");
             return false;
         }
 
         Villager villager = VillagerCapturerItem.createCapturedVillager(level, stack, new BlockPos(0, 0, 0));
         if (villager == null) {
+            TradingCells.LOGGER.warn("[VillagerCapturer] No se pudo crear la entidad aldeano desde el item. Comprobar NBT del item.");
             return false;
         }
 
         poseStack.pushPose();
         try {
-            applyDisplayTransform(displayContext, poseStack);
-            return RENDER_BACKEND.render(villager, poseStack, bufferSource, packedLight, packedOverlay, partialTick);
+            // Normalizamos siempre a un perfil (podemos recibir displayContext cuando se llama manualmente
+            // o null cuando se invoca desde el model "minecraft:special"). Mapear a un perfil asegura
+            // que aplicamos la misma lógica base en todos los caminos.
+            SpecialProfile profileToUse = (displayContext == null) ? specialProfile : mapDisplayContextToProfile(displayContext);
+            // Delegate adult vs baby rendering to separate helpers for clarity.
+            // Render both adults and babies identically: use the same render path
+            return renderAdultVillager(villager, poseStack, renderOutput, partialTick, profileToUse);
+        } catch (Exception e) {
+            TradingCells.LOGGER.error("[VillagerCapturer] Excepción en el renderizado del aldeano", e);
+            return false;
         } finally {
             poseStack.popPose();
         }
     }
 
-    private static void applyDisplayTransform(ItemDisplayContext displayContext, PoseStack poseStack) {
-        switch (displayContext) {
-            case FIRST_PERSON_LEFT_HAND, FIRST_PERSON_RIGHT_HAND, THIRD_PERSON_LEFT_HAND, THIRD_PERSON_RIGHT_HAND -> {
-                poseStack.scale(0.38F, 0.38F, 0.38F);
-                poseStack.translate(0.0D, -0.10D, 0.0D);
-            }
-            case GUI, FIXED, GROUND -> {
-                poseStack.scale(0.35F, 0.35F, 0.35F);
-                poseStack.translate(0.0D, -0.15D, 0.0D);
-            }
-            default -> {
-                poseStack.scale(0.35F, 0.35F, 0.35F);
-                poseStack.translate(0.0D, -0.15D, 0.0D);
-            }
+    // no reflection fallback required in minimal implementation
+
+    // MultiBufferSource convenience overload removed to reduce unused APIs; callers should use the Object-based variant
+
+    // applyDisplayTransform removed - we always use applySpecialModelBaseTransform which
+    // centralizes scale/translation/rotation per SpecialProfile. This avoids duplicate
+    // transform logic and potential inconsistencies between code paths.
+
+    // applySpecialModelBaseTransform was removed to reduce dead code; we keep a single applyTransform implementation.
+
+    private static SpecialProfile mapDisplayContextToProfile(ItemDisplayContext displayContext) {
+        return switch (displayContext) {
+            case FIRST_PERSON_LEFT_HAND, FIRST_PERSON_RIGHT_HAND -> SpecialProfile.FIRST_PERSON;
+            case THIRD_PERSON_LEFT_HAND, THIRD_PERSON_RIGHT_HAND -> SpecialProfile.THIRD_PERSON;
+            case FIXED -> SpecialProfile.FIXED;
+            case GUI -> SpecialProfile.GUI;
+            default -> SpecialProfile.DEFAULT;
+        };
+    }
+
+    private static Transform getTransformForEntity(SpecialProfile profile) {
+        // Minimal: use profile-level defaults for all entities (adult and baby)
+        return TRANSFORMS.getOrDefault(profile, TRANSFORMS.get(SpecialProfile.DEFAULT));
+    }
+
+    private static void applyTransform(PoseStack poseStack, Transform t) {
+        poseStack.scale(t.scale(), t.scale(), t.scale());
+        poseStack.translate(t.x(), t.y(), t.z());
+        if (t.rotX() != 0.0F) poseStack.mulPose(Axis.XP.rotationDegrees(t.rotX()));
+        if (t.rotY() != 0.0F) poseStack.mulPose(Axis.YP.rotationDegrees(t.rotY()));
+        if (t.rotZ() != 0.0F) poseStack.mulPose(Axis.ZP.rotationDegrees(t.rotZ()));
+    }
+
+    // Separate rendering helpers for adult and baby villagers so future behavior
+    // can diverge without touching the shared code path.
+    private static boolean renderAdultVillager(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+        Transform transform = getTransformForEntity(profile);
+        applyTransform(poseStack, transform);
+        // Render with a default fixed orientation (ignore the original entity's look direction).
+        // Save/restore rotation state so we don't mutate the captured entity permanently.
+        return orientationFixer(villager, poseStack, renderOutput, partialTick, profile);
+    }
+
+    // Babies render exactly like adults in this minimal implementation; no separate method required.
+
+    private static boolean orientationFixer(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+        // Save current rotation-related state that is accessible
+        float prevYHeadRot = villager.yHeadRot;
+        float prevYBodyRot = villager.yBodyRot;
+        float prevYRotO = villager.yRotO;
+        float prevXRotO = villager.xRotO;
+        float prevYHeadRotO = villager.yHeadRotO;
+        float prevYBodyRotO = villager.yBodyRotO;
+        try {
+            // Zero out accessible rotation fields so rendered entity faces default orientation
+            villager.yHeadRot = 0.0F;
+            villager.yBodyRot = 0.0F;
+            villager.yRotO = 0.0F;
+            villager.xRotO = 0.0F;
+            villager.yHeadRotO = 0.0F;
+            villager.yBodyRotO = 0.0F;
+            // Ignore any stored lighting or pose; render a neutral texture-only preview.
+            return RENDER_BACKEND.render(villager, poseStack, renderOutput, partialTick, profile, 0);
+        } finally {
+            // Restore saved state exactly to the same fields we modified
+            villager.yHeadRot = prevYHeadRot;
+            villager.yBodyRot = prevYBodyRot;
+            villager.yRotO = prevYRotO;
+            villager.xRotO = prevXRotO;
+            villager.yHeadRotO = prevYHeadRotO;
+            villager.yBodyRotO = prevYBodyRotO;
         }
     }
 
-    public interface VillagerCapturerRenderBackend {
-        boolean render(Villager villager, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, int packedOverlay, float partialTick);
-    }
+    /*
+     * Small pose adjustments applied only to baby entities after the base transform.
+     * Kept minimal but separate so baby rendering can be tuned without touching adult code.
+     */
+    // No baby-specific adjustments in minimal implementation
 
-    private static final class MinecraftVillagerCapturerRenderBackend implements VillagerCapturerRenderBackend {
+    // ---------------------------------------------------------------------
+    // Consolidated special renderer classes and an internal backend so all
+    // rendering code lives in this single file (user preference).
+    // ---------------------------------------------------------------------
+
+    /**
+     * Base special renderer used by concrete profile renderers.
+     */
+    static class VillagerCapturerProfiledSpecialRenderer implements SpecialModelRenderer<ItemStack> {
+        private final SpecialProfile profile;
+
+        protected VillagerCapturerProfiledSpecialRenderer(SpecialProfile profile) {
+            this.profile = profile;
+        }
+
+        public ItemStack extractArgument(@NonNull ItemStack stack) {
+            return stack;
+        }
+
         @Override
-        public boolean render(Villager villager, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, int packedOverlay, float partialTick) {
+        public void submit(ItemStack stack, @NonNull PoseStack poseStack, @NonNull SubmitNodeCollector submitNodeCollector, int packedLight, int packedOverlay, boolean hasFoil, int seed) {
+            if (stack == null) return;
+            // Intentionally silent here: no logging to avoid spam in normal play.
+            boolean rendered = false;
             try {
-                Object renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(villager);
-                if (renderer == null) {
-                    return false;
-                }
-
-                if (invokeDirectRender(renderer, villager, poseStack, bufferSource, packedLight, partialTick)) {
-                    return true;
-                }
-
-                Object renderState = createRenderState(renderer, villager, partialTick);
-                if (renderState == null) {
-                    return false;
-                }
-
-                return invokeRender(renderer, renderState, poseStack, bufferSource, packedLight, packedOverlay);
-            } catch (ReflectiveOperationException ignored) {
-                return false;
+                rendered = renderVillagerSpecial(
+                        stack,
+                        poseStack,
+                        submitNodeCollector,
+                        packedLight,
+                        packedOverlay,
+                        0.0F,
+                        profile
+                );
+            } catch (Exception e) {
+                TradingCells.LOGGER.error("[VillagerCapturer] Error al renderizar aldeano (profile {})", profile, e);
+            }
+            if (!rendered) {
+                TradingCells.LOGGER.trace("[VillagerCapturer] No se pudo renderizar el aldeano (profile {}), usando textura vanilla.", profile);
             }
         }
 
-        private static Object createRenderState(Object renderer, Villager villager, float partialTick) throws ReflectiveOperationException {
-            Method creator = findMethod(renderer.getClass(), "createRenderState", 0);
-            Object renderState = creator != null ? creator.invoke(renderer) : null;
-
-            Method extractor = findMethod(renderer.getClass(), "extractRenderState", 0);
-            if (extractor == null) {
-                extractor = findMethod(renderer.getClass(), "extractRenderState", 1);
-            }
-            if (extractor == null) {
-                extractor = findMethod(renderer.getClass(), "extractRenderState", 2);
-            }
-            if (extractor == null) {
-                extractor = findMethod(renderer.getClass(), "extractRenderState", 3);
-            }
-
-            if (extractor != null) {
-                Object[] args = buildArgs(extractor, villager, renderState, partialTick);
-                Object returned = extractor.invoke(renderer, args);
-                if (returned != null) {
-                    renderState = returned;
+        @Override
+        public void getExtents( java.util.function.@NonNull Consumer<Vector3fc> extents) {
+            switch (profile) {
+                case GUI -> {
+                    extents.accept(new Vector3f(-0.5F, 0.0F, -0.5F));
+                    extents.accept(new Vector3f(0.5F, 1.0F, 0.5F));
+                }
+                case FIRST_PERSON -> {
+                    extents.accept(new Vector3f(-0.3F, 0.0F, -0.3F));
+                    extents.accept(new Vector3f(0.3F, 0.9F, 0.3F));
+                }
+                case THIRD_PERSON -> {
+                    extents.accept(new Vector3f(-0.45F, 0.0F, -0.45F));
+                    extents.accept(new Vector3f(0.45F, 1.4F, 0.45F));
+                }
+                case FIXED, ON_SHELF -> {
+                    extents.accept(new Vector3f(-0.45F, 0.0F, -0.45F));
+                    extents.accept(new Vector3f(0.45F, 1.0F, 0.45F));
+                }
+                default -> {
+                    extents.accept(new Vector3f(-0.4F, 0.0F, -0.4F));
+                    extents.accept(new Vector3f(0.4F, 1.0F, 0.4F));
                 }
             }
-
-            return renderState;
-        }
-
-        private static boolean invokeDirectRender(Object renderer, Villager villager, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) throws ReflectiveOperationException {
-            Method render = null;
-            for (Method method : renderer.getClass().getMethods()) {
-                if (!method.getName().equals("render") || method.getParameterCount() != 6) {
-                    continue;
-                }
-                Class<?> firstParam = method.getParameterTypes()[0];
-                if (firstParam.isAssignableFrom(villager.getClass()) || firstParam.isAssignableFrom(Entity.class)) {
-                    render = method;
-                    break;
-                }
-            }
-
-            if (render == null) {
-                return false;
-            }
-
-            Object[] args = new Object[] { villager, 0.0F, partialTick, poseStack, bufferSource, packedLight };
-            render.invoke(renderer, args);
-            return true;
-        }
-
-        private static boolean invokeRender(Object renderer, Object renderState, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, int packedOverlay) throws ReflectiveOperationException {
-            Method render = null;
-            for (Method method : renderer.getClass().getMethods()) {
-                if (!method.getName().equals("render") || method.getParameterCount() != 5 && method.getParameterCount() != 4) {
-                    continue;
-                }
-                Class<?> firstParam = method.getParameterTypes()[0];
-                if (firstParam.isAssignableFrom(renderState.getClass()) || firstParam.getSimpleName().endsWith("RenderState")) {
-                    render = method;
-                    break;
-                }
-            }
-
-            if (render == null) {
-                return false;
-            }
-
-            if (render.getParameterCount() == 5) {
-                render.invoke(renderer, renderState, poseStack, bufferSource, packedLight, packedOverlay);
-            } else {
-                render.invoke(renderer, renderState, poseStack, bufferSource, packedLight);
-            }
-            return true;
-        }
-
-        private static Method findMethod(Class<?> type, String name, int parameterCount) {
-            for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-                for (Method method : current.getDeclaredMethods()) {
-                    if (method.getName().equals(name) && method.getParameterCount() == parameterCount) {
-                        method.setAccessible(true);
-                        return method;
-                    }
-                }
-            }
-            for (Method method : type.getMethods()) {
-                if (method.getName().equals(name) && method.getParameterCount() == parameterCount) {
-                    return method;
-                }
-            }
-            return null;
-        }
-
-        private static Object[] buildArgs(Method method, Villager villager, Object renderState, float partialTick) {
-            Class<?>[] params = method.getParameterTypes();
-            Object[] args = new Object[params.length];
-            for (int i = 0; i < params.length; i++) {
-                Class<?> param = params[i];
-                if (param.isAssignableFrom(villager.getClass())) {
-                    args[i] = villager;
-                } else if (renderState != null && param.isAssignableFrom(renderState.getClass())) {
-                    args[i] = renderState;
-                } else if (param == float.class || param == Float.class) {
-                    args[i] = partialTick;
-                } else if (param == int.class || param == Integer.class) {
-                    args[i] = 0;
-                } else if (param == boolean.class || param == Boolean.class) {
-                    args[i] = false;
-                } else {
-                    args[i] = null;
-                }
-            }
-            return args;
         }
     }
+
+    public static final class Default extends VillagerCapturerProfiledSpecialRenderer {
+        public Default() { super(SpecialProfile.DEFAULT); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Default::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class Gui extends VillagerCapturerProfiledSpecialRenderer {
+        public Gui() { super(SpecialProfile.GUI); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Gui::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class Fixed extends VillagerCapturerProfiledSpecialRenderer {
+        public Fixed() { super(SpecialProfile.FIXED); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Fixed::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class OnShelf extends VillagerCapturerProfiledSpecialRenderer {
+        public OnShelf() { super(SpecialProfile.ON_SHELF); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(OnShelf::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class ThirdPerson extends VillagerCapturerProfiledSpecialRenderer {
+        public ThirdPerson() { super(SpecialProfile.THIRD_PERSON); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(ThirdPerson::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class FirstPerson extends VillagerCapturerProfiledSpecialRenderer {
+        public FirstPerson() { super(SpecialProfile.FIRST_PERSON); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(FirstPerson::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    // Small helper to avoid repeating the same Unbaked boilerplate for each profile
+    @SuppressWarnings({"rawtypes","unchecked"})
+    private static final class ConfigurableUnbaked implements SpecialModelRenderer.Unbaked<SpecialModelRenderer> {
+        private final java.util.function.Supplier<SpecialModelRenderer> factory;
+        private final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> codec;
+
+        ConfigurableUnbaked(java.util.function.Supplier<SpecialModelRenderer> factory) {
+            this.factory = factory;
+            this.codec = MapCodec.unit(this);
+        }
+
+        @Override
+        public @NonNull MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> type() {
+            return this.codec;
+        }
+
+        @Override
+        public SpecialModelRenderer bake(SpecialModelRenderer.@NonNull BakingContext bakingContext) {
+            return this.factory.get();
+        }
+    }
+
+    /**
+     * Internal backend adapter moved into this file so nobody has to jump between files.
+     */
+    public static final class MinecraftVillagerCapturerRenderBackend {
+        public boolean render(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int capturedLight) {
+            if (!(renderOutput instanceof SubmitNodeCollector submitNodeCollector)) {
+                return false;
+            }
+
+            Minecraft mc = Minecraft.getInstance();
+            net.minecraft.client.renderer.state.level.CameraRenderState cameraState = new net.minecraft.client.renderer.state.level.CameraRenderState();
+            // GUI (inventory/hotbar) -> force max brightness so the item preview is clearly visible.
+            // Other profiles: use world lighting (initialized = false) so hand/world previews follow environment.
+            if (profile == SpecialProfile.GUI) {
+                cameraState.initialized = true;
+                trySetCameraLight(cameraState, "blockLight", 15);
+                trySetCameraLight(cameraState, "skyLight", 15);
+            } else {
+                cameraState.initialized = false;
+            }
+
+            EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+            EntityRenderState state = dispatcher.extractEntity(villager, partialTick);
+            dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
+            return true;
+        }
+
+        private static void trySetCameraLight(net.minecraft.client.renderer.state.level.CameraRenderState cameraState, String fieldName, int value) {
+            try {
+                java.lang.reflect.Field f = cameraState.getClass().getField(fieldName);
+                f.setInt(cameraState, value);
+            } catch (NoSuchFieldException | IllegalAccessException _) {
+                // ignore if field not present in this mapping/version
+            }
+        }
+    }
+
 }

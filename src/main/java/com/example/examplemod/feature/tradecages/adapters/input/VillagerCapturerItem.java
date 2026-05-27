@@ -8,7 +8,6 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.villager.Villager;
-import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
@@ -18,27 +17,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
-import com.example.examplemod.feature.tradecages.adapters.output.client.VillagerCapturerItemRenderer;
-import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
-
-import java.util.function.Consumer;
-
 public class VillagerCapturerItem extends Item {
     public VillagerCapturerItem(Properties properties) {
         super(properties);
     }
 
-    @Override
-    public void initializeClient(Consumer<IClientItemExtensions> consumer) {
-        consumer.accept(new IClientItemExtensions() {
-            private final VillagerCapturerItemRenderer renderer = new VillagerCapturerItemRenderer();
-
-            @Override
-            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
-                return renderer;
-            }
-        });
-    }
 
     public static boolean hasCapturedVillager(ItemStack stack) {
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
@@ -53,6 +36,20 @@ public class VillagerCapturerItem extends Item {
         TagValueOutput output = TagValueOutput.createWithoutContext(ProblemReporter.DISCARDING);
         villager.saveWithoutId(output);
         CompoundTag villagerData = output.buildResult();
+        // Remove transient data we do not want to persist: position/rotation/motion and lighting.
+        // Also remove hurt/damage state so the stored entity doesn't keep the red hurt tint.
+        // Keep only the semantic data necessary to restore the villager (profession, trades, name, age, etc.).
+        villagerData.remove("Pos");
+        villagerData.remove("Motion");
+        villagerData.remove("Rotation");
+        villagerData.remove("FallDistance");
+        villagerData.remove("Air");
+        villagerData.remove("OnGround");
+        // Remove hurt-related tags that cause the red damage overlay
+        villagerData.remove("HurtTime");
+        villagerData.remove("HurtByTimestamp");
+        villagerData.remove("LastHurtByPlayer");
+        villagerData.remove("LastHurt");
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(villagerData));
         return true;
     }

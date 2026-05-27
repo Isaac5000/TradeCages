@@ -1,0 +1,14 @@
+{
+  "itemGroup.trading_cells": "Trading Cells",
+  "block.trading_cells.villager_trading_cell": "Trading Cell",
+  "item.trading_cells.villager_capturer": "Villager Capturer",
+  "item.trading_cells.piglin_capturer": "Piglin Capturer",
+
+  "trading_cells.configuration.title": "Trade Cages Configs",
+  "trading_cells.configuration.section.trading_cells.common.toml": "Trading Cells Configs",
+  "trading_cells.configuration.section.trading_cells.common.toml.title": "Trading Cells Configs",
+
+  "villager.baby": "Baby %s",
+  "piglin.baby": "Baby %s"
+}
+

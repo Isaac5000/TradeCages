@@ -1,14 +1,14 @@
 package com.example.examplemod.feature.tradecages.application.usecase;
 import com.example.examplemod.feature.tradecages.application.port.input.CaptureVillagerUseCase;
-import com.example.examplemod.feature.tradecages.domain.model.TradeCageConfig;
+import com.example.examplemod.feature.tradecages.domain.model.TradingCellConfig;
 import com.example.examplemod.feature.tradecages.domain.model.TradeVillager;
 import net.minecraft.world.entity.npc.villager.Villager;
 import java.util.ArrayList;
 import java.util.List;
 public class CaptureVillagerUseCaseImp implements CaptureVillagerUseCase {
-    private final TradeCageConfig config;
+    private final TradingCellConfig config;
     private final List<TradeVillager> capturedVillagers;
-    public CaptureVillagerUseCaseImp(TradeCageConfig config) {
+    public CaptureVillagerUseCaseImp(TradingCellConfig config) {
         this.config = config;
         this.capturedVillagers = new ArrayList<>();
     }

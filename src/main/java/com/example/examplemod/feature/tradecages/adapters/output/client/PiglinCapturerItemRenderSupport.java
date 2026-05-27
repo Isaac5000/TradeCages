@@ -1,0 +1,317 @@
+package com.example.examplemod.feature.tradecages.adapters.output.client;
+
+import com.example.examplemod.feature.tradecages.adapters.input.PiglinCapturerItem;
+import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
+import com.mojang.math.Axis;
+
+import java.util.EnumMap;
+import java.util.Map;
+import net.minecraft.world.entity.monster.piglin.Piglin;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import com.mojang.serialization.MapCodec;
+import net.minecraft.client.renderer.special.SpecialModelRenderer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
+import org.jspecify.annotations.NonNull;
+// removed unused Nullable import
+
+public final class PiglinCapturerItemRenderSupport {
+    private static final MinecraftPiglinCapturerRenderBackend RENDER_BACKEND = new MinecraftPiglinCapturerRenderBackend();
+
+    public enum SpecialProfile {
+        DEFAULT,
+        GUI,
+        FIXED,
+        ON_SHELF,
+        THIRD_PERSON,
+        FIRST_PERSON
+    }
+
+    private PiglinCapturerItemRenderSupport() {}
+
+    public record Transform(float scale, double x, double y, double z, float rotX, float rotY, float rotZ) {}
+
+    private static final Map<SpecialProfile, Transform> TRANSFORMS = new EnumMap<>(SpecialProfile.class);
+
+    static {
+        TRANSFORMS.put(SpecialProfile.FIRST_PERSON,
+                new Transform(0.5F,
+                        2.0D, 0.0D, 0.0D,
+                        -5.0F, 320.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.THIRD_PERSON,
+                new Transform(0.26F,
+                        1.7D, 1.7D, 2.2D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.GUI,
+                new Transform(0.4F,
+                        1.20D, 0.2D, 0.0D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.FIXED,
+                new Transform(0.4F,
+                        1.2D, 0.0D, 1.2D,
+                        0.0F, 180.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.ON_SHELF,
+                new Transform(0.80F,
+                        0.6D, -0.4D, 0.5D,
+                        0.0F, 0.0F, 0.0F));
+
+        TRANSFORMS.put(SpecialProfile.DEFAULT,
+                new Transform(0.45F,
+                        1.1D, 0.0D, 1.2D,
+                        0.0F, 180.0F, 0.0F));
+    }
+
+    // getProfileTransform intentionally removed to reduce public surface; use TRANSFORMS directly
+
+    private record RenderParams(ItemDisplayContext displayContext,
+                                PoseStack poseStack,
+                                Object renderOutput,
+                                int packedLight,
+                                int packedOverlay,
+                                float partialTick,
+                                SpecialProfile specialProfile) {}
+
+    // Convenience overloads removed; use renderPiglinSpecial(...) or internal entrypoint.
+
+    public static boolean renderPiglinSpecial(ItemStack stack, PoseStack poseStack, Object renderOutput, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
+        RenderParams params = new RenderParams(null, poseStack, renderOutput, packedLight, packedOverlay, partialTick, profile);
+        return renderPiglinInternal(stack, params);
+    }
+
+    private static boolean renderPiglinInternal(ItemStack stack, RenderParams params) {
+        ItemDisplayContext displayContext = params.displayContext;
+        PoseStack poseStack = params.poseStack;
+        Object renderOutput = params.renderOutput;
+        float partialTick = params.partialTick;
+        SpecialProfile specialProfile = params.specialProfile;
+        Level level = Minecraft.getInstance().level;
+        if (level == null) {
+            TradingCells.LOGGER.debug("[PiglinCapturer] Nivel nulo, no se puede renderizar piglin.");
+            return false;
+        }
+        if (!PiglinCapturerItem.hasCapturedPiglin(stack)) {
+            TradingCells.LOGGER.trace("[PiglinCapturer] No hay piglin capturado en el item.");
+            return false;
+        }
+
+        Piglin piglin = PiglinCapturerItem.createCapturedPiglin(level, stack, new BlockPos(0, 0, 0));
+        if (piglin == null) {
+            TradingCells.LOGGER.warn("[PiglinCapturer] No se pudo crear la entidad piglin desde el item. Comprobar NBT del item.");
+            return false;
+        }
+
+        poseStack.pushPose();
+        try {
+            SpecialProfile profileToUse = (displayContext == null) ? specialProfile : mapDisplayContextToProfile(displayContext);
+            return renderAdultPiglin(piglin, poseStack, renderOutput, partialTick, profileToUse);
+        } catch (Exception e) {
+            TradingCells.LOGGER.error("[PiglinCapturer] Excepción en el renderizado del piglin", e);
+            return false;
+        } finally {
+            poseStack.popPose();
+        }
+    }
+
+    private static SpecialProfile mapDisplayContextToProfile(ItemDisplayContext displayContext) {
+        return switch (displayContext) {
+            case FIRST_PERSON_LEFT_HAND, FIRST_PERSON_RIGHT_HAND -> SpecialProfile.FIRST_PERSON;
+            case THIRD_PERSON_LEFT_HAND, THIRD_PERSON_RIGHT_HAND -> SpecialProfile.THIRD_PERSON;
+            case FIXED -> SpecialProfile.FIXED;
+            case GUI -> SpecialProfile.GUI;
+            default -> SpecialProfile.DEFAULT;
+        };
+    }
+
+    private static Transform getTransformForEntity(SpecialProfile profile) {
+        return TRANSFORMS.getOrDefault(profile, TRANSFORMS.get(SpecialProfile.DEFAULT));
+    }
+
+    private static void applyTransform(PoseStack poseStack, Transform t) {
+        poseStack.scale(t.scale(), t.scale(), t.scale());
+        poseStack.translate(t.x(), t.y(), t.z());
+        if (t.rotX() != 0.0F) poseStack.mulPose(Axis.XP.rotationDegrees(t.rotX()));
+        if (t.rotY() != 0.0F) poseStack.mulPose(Axis.YP.rotationDegrees(t.rotY()));
+        if (t.rotZ() != 0.0F) poseStack.mulPose(Axis.ZP.rotationDegrees(t.rotZ()));
+    }
+
+    private static boolean renderAdultPiglin(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+        Transform transform = getTransformForEntity(profile);
+        applyTransform(poseStack, transform);
+        return orientationFixer(piglin, poseStack, renderOutput, partialTick, profile);
+    }
+
+    // Babies render identical to adults in minimal implementation; no separate method required.
+
+    private static boolean orientationFixer(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+        // Save accessible rotation-related fields
+        float prevYHeadRot = piglin.yHeadRot;
+        float prevYBodyRot = piglin.yBodyRot;
+        float prevYRotO = piglin.yRotO;
+        float prevXRotO = piglin.xRotO;
+        float prevYHeadRotO = piglin.yHeadRotO;
+        float prevYBodyRotO = piglin.yBodyRotO;
+        try {
+            // Zero out accessible rotation fields so entity faces default orientation
+            piglin.yHeadRot = 0.0F;
+            piglin.yBodyRot = 0.0F;
+            piglin.yRotO = 0.0F;
+            piglin.xRotO = 0.0F;
+            piglin.yHeadRotO = 0.0F;
+            piglin.yBodyRotO = 0.0F;
+            // We ignore any stored lighting or pose. Backend renders a neutral, texture-only preview.
+            return RENDER_BACKEND.render(piglin, poseStack, renderOutput, partialTick, profile);
+        } finally {
+            piglin.yHeadRot = prevYHeadRot;
+            piglin.yBodyRot = prevYBodyRot;
+            piglin.yRotO = prevYRotO;
+            piglin.xRotO = prevXRotO;
+            piglin.yHeadRotO = prevYHeadRotO;
+            piglin.yBodyRotO = prevYBodyRotO;
+        }
+    }
+
+    static class PiglinCapturerProfiledSpecialRenderer implements SpecialModelRenderer<ItemStack> {
+        private final SpecialProfile profile;
+
+        protected PiglinCapturerProfiledSpecialRenderer(SpecialProfile profile) { this.profile = profile; }
+
+        public ItemStack extractArgument(@NonNull ItemStack stack) { return stack; }
+
+        @Override
+        public void submit(ItemStack stack, @NonNull PoseStack poseStack, @NonNull SubmitNodeCollector submitNodeCollector, int packedLight, int packedOverlay, boolean hasFoil, int seed) {
+            if (stack == null) return;
+            boolean rendered = false;
+            try {
+                rendered = renderPiglinSpecial(stack, poseStack, submitNodeCollector, packedLight, packedOverlay, 0.0F, profile);
+            } catch (Exception e) {
+                TradingCells.LOGGER.error("[PiglinCapturer] Error al renderizar piglin (profile {})", profile, e);
+            }
+            if (!rendered) {
+                TradingCells.LOGGER.trace("[PiglinCapturer] No se pudo renderizar el piglin (profile {}), usando textura vanilla.", profile);
+            }
+        }
+
+        @Override
+        public void getExtents(java.util.function.@NonNull Consumer<Vector3fc> extents) {
+            switch (profile) {
+                case GUI -> { extents.accept(new Vector3f(-0.5F, 0.0F, -0.5F)); extents.accept(new Vector3f(0.5F, 1.0F, 0.5F)); }
+                case FIRST_PERSON -> { extents.accept(new Vector3f(-0.3F, 0.0F, -0.3F)); extents.accept(new Vector3f(0.3F, 0.9F, 0.3F)); }
+                case THIRD_PERSON -> { extents.accept(new Vector3f(-0.45F, 0.0F, -0.45F)); extents.accept(new Vector3f(0.45F, 1.4F, 0.45F)); }
+                case FIXED, ON_SHELF -> { extents.accept(new Vector3f(-0.45F, 0.0F, -0.45F)); extents.accept(new Vector3f(0.45F, 1.0F, 0.45F)); }
+                default -> { extents.accept(new Vector3f(-0.4F, 0.0F, -0.4F)); extents.accept(new Vector3f(0.4F, 1.0F, 0.4F)); }
+            }
+        }
+    }
+
+    public static final class Default extends PiglinCapturerProfiledSpecialRenderer {
+        public Default() { super(SpecialProfile.DEFAULT); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Default::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class Gui extends PiglinCapturerProfiledSpecialRenderer {
+        public Gui() { super(SpecialProfile.GUI); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Gui::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class Fixed extends PiglinCapturerProfiledSpecialRenderer {
+        public Fixed() { super(SpecialProfile.FIXED); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(Fixed::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class OnShelf extends PiglinCapturerProfiledSpecialRenderer {
+        public OnShelf() { super(SpecialProfile.ON_SHELF); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(OnShelf::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class ThirdPerson extends PiglinCapturerProfiledSpecialRenderer {
+        public ThirdPerson() { super(SpecialProfile.THIRD_PERSON); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(ThirdPerson::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    public static final class FirstPerson extends PiglinCapturerProfiledSpecialRenderer {
+        public FirstPerson() { super(SpecialProfile.FIRST_PERSON); }
+        @SuppressWarnings({"rawtypes"})
+        public static final class Unbaked {
+            private static final ConfigurableUnbaked INSTANCE = new ConfigurableUnbaked(FirstPerson::new);
+            public static final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> MAP_CODEC = INSTANCE.type();
+            private Unbaked() {}
+        }
+    }
+
+    @SuppressWarnings({"rawtypes","unchecked"})
+    private static final class ConfigurableUnbaked implements SpecialModelRenderer.Unbaked<SpecialModelRenderer> {
+        private final java.util.function.Supplier<SpecialModelRenderer> factory;
+        private final MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> codec;
+        ConfigurableUnbaked(java.util.function.Supplier<SpecialModelRenderer> factory) { this.factory = factory; this.codec = MapCodec.unit(this); }
+        @Override public @NonNull MapCodec<? extends SpecialModelRenderer.Unbaked<SpecialModelRenderer>> type() { return this.codec; }
+        @Override public SpecialModelRenderer bake(SpecialModelRenderer.@NonNull BakingContext bakingContext) { return this.factory.get(); }
+    }
+
+    public static final class MinecraftPiglinCapturerRenderBackend {
+        public boolean render(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+            if (!(renderOutput instanceof SubmitNodeCollector submitNodeCollector)) { return false; }
+            Minecraft mc = Minecraft.getInstance();
+            net.minecraft.client.renderer.state.level.CameraRenderState cameraState = new net.minecraft.client.renderer.state.level.CameraRenderState();
+            // GUI (inventory/hotbar) -> force max brightness so the item preview is clearly visible.
+            // Other profiles: use world lighting (initialized = false) so hand/world previews follow environment.
+            if (profile == SpecialProfile.GUI) {
+                cameraState.initialized = true;
+                trySetCameraLight(cameraState, "blockLight", 15);
+                trySetCameraLight(cameraState, "skyLight", 15);
+            } else {
+                cameraState.initialized = false;
+            }
+            EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+            EntityRenderState state = dispatcher.extractEntity(piglin, partialTick);
+
+            dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
+            return true;
+        }
+
+        private static void trySetCameraLight(net.minecraft.client.renderer.state.level.CameraRenderState cameraState, String fieldName, int value) {
+            try {
+                java.lang.reflect.Field f = cameraState.getClass().getField(fieldName);
+                f.setInt(cameraState, value);
+            } catch (NoSuchFieldException | IllegalAccessException _) {
+                // ignore
+            }
+        }
+    }
+}
