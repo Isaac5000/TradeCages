@@ -1,5 +1,6 @@
 package com.example.examplemod.platform.neoforge.bootstrap;
 
+import com.example.examplemod.platform.neoforge.network.TradingCellPayloadRegistration;
 import com.example.examplemod.platform.neoforge.registration.Registration;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
@@ -15,6 +16,8 @@ public class TradingCells {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TradingCells(IEventBus modEventBus, ModContainer modContainer) {
+        modEventBus.addListener(TradingCellPayloadRegistration::onRegisterPayloads);
+
         // 1. Initialize Registries (Output Adapters to Minecraft)
         Registration.init(modEventBus);
 

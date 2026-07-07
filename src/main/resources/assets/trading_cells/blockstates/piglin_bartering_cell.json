@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "trading_cells:block/piglin_bartering_cell" },
+    "facing=east": { "model": "trading_cells:block/piglin_bartering_cell", "y": 90 },
+    "facing=south": { "model": "trading_cells:block/piglin_bartering_cell", "y": 180 },
+    "facing=west": { "model": "trading_cells:block/piglin_bartering_cell", "y": 270 }
+  }
+}

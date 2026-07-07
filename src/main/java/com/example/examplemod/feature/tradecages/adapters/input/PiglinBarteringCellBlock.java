@@ -1,20 +1,23 @@
 package com.example.examplemod.feature.tradecages.adapters.input;
 
+import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
 import com.mojang.serialization.MapCodec;
-import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -23,11 +26,11 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-public class VillagerTradingCellBlock extends BaseEntityBlock {
-    public static final MapCodec<VillagerTradingCellBlock> CODEC = simpleCodec(VillagerTradingCellBlock::new);
+public class PiglinBarteringCellBlock extends BaseEntityBlock {
+    public static final MapCodec<PiglinBarteringCellBlock> CODEC = simpleCodec(PiglinBarteringCellBlock::new);
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
 
-    public VillagerTradingCellBlock(Properties properties) {
+    public PiglinBarteringCellBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
     }
@@ -49,12 +52,25 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
 
     @Override
     public @Nullable BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
-        return new VillagerTradingCellBlockEntity(pos, state);
+        return new PiglinBarteringCellBlockEntity(pos, state);
     }
 
     @Override
     protected @NonNull RenderShape getRenderShape(@NonNull BlockState state) {
         return RenderShape.MODEL;
+    }
+
+    @Override
+    public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(
+            @NonNull Level level,
+            @NonNull BlockState state,
+            @NonNull BlockEntityType<T> type
+    ) {
+        return level.isClientSide() ? null : createTickerHelper(
+                type,
+                TradingCellsRegistrationAdapter.PIGLIN_BARTERING_CELL_BLOCK_ENTITY.get(),
+                PiglinBarteringCellBlockEntity::serverTick
+        );
     }
 
     @Override
@@ -71,32 +87,25 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        VillagerTradingCellBlockEntity cell = getCell(level, pos);
+        PiglinBarteringCellBlockEntity cell = getCell(level, pos);
         if (cell == null) {
             return InteractionResult.FAIL;
         }
 
-        if (stack.getItem() instanceof VillagerCapturerItem) {
-            if (VillagerCapturerItem.hasCapturedVillager(stack)) {
-                return cell.insertVillagerFromCapturer(stack, player);
-            }
-
-            return cell.extractVillagerToCapturer(stack, player);
-        }
-
         if (stack.getItem() instanceof PiglinCapturerItem) {
-            if (cell.hasPiglin() && !PiglinCapturerItem.hasCapturedPiglin(stack)) {
-                return cell.extractPiglinToCapturer(stack, player);
+            if (PiglinCapturerItem.hasCapturedPiglin(stack)) {
+                return cell.insertPiglinFromCapturer(stack, player);
             }
-            player.sendSystemMessage(Component.translatable("message.trading_cells.use_piglin_bartering_cell"));
-            return InteractionResult.SUCCESS_SERVER;
+            return cell.extractPiglinToCapturer(stack, player);
         }
 
-        if (!player.isShiftKeyDown() && stack.getItem() instanceof BlockItem) {
-            InteractionResult result = cell.insertPoiFromStack(stack, player);
-            if (result != InteractionResult.PASS) {
-                return result;
-            }
+        if (stack.is(Items.GOLD_INGOT)) {
+            return cell.barterGold(stack, player);
+        }
+
+        if (stack.getItem() instanceof VillagerCapturerItem) {
+            player.sendSystemMessage(Component.translatable("message.trading_cells.wrong_capturer"));
+            return InteractionResult.SUCCESS_SERVER;
         }
 
         return stack.isEmpty() ? InteractionResult.TRY_WITH_EMPTY_HAND : InteractionResult.PASS;
@@ -114,16 +123,15 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        VillagerTradingCellBlockEntity cell = getCell(level, pos);
+        PiglinBarteringCellBlockEntity cell = getCell(level, pos);
         if (cell == null) {
             return InteractionResult.FAIL;
         }
 
-        if (player.isShiftKeyDown()) {
-            return cell.extractPoiToPlayer(player);
-        }
-
-        return cell.openTrade(player);
+        player.sendSystemMessage(Component.translatable(cell.hasPiglin()
+                ? "message.trading_cells.piglin_barter_hint"
+                : "message.trading_cells.cell_empty"));
+        return InteractionResult.SUCCESS_SERVER;
     }
 
     @Override
@@ -135,16 +143,16 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
             @Nullable BlockEntity blockEntity,
             @NonNull ItemStack tool
     ) {
-        if (!level.isClientSide() && blockEntity instanceof VillagerTradingCellBlockEntity cell) {
-            cell.dropStoredContents(level, pos);
+        if (!level.isClientSide() && blockEntity instanceof PiglinBarteringCellBlockEntity cell) {
+            cell.dropStoredPiglinCapturer(level, pos);
         }
 
         super.playerDestroy(level, player, pos, state, blockEntity, tool);
     }
 
-    private static @Nullable VillagerTradingCellBlockEntity getCell(Level level, BlockPos pos) {
+    private static @Nullable PiglinBarteringCellBlockEntity getCell(Level level, BlockPos pos) {
         BlockEntity blockEntity = level.getBlockEntity(pos);
-        if (blockEntity instanceof VillagerTradingCellBlockEntity cell) {
+        if (blockEntity instanceof PiglinBarteringCellBlockEntity cell) {
             return cell;
         }
         return null;

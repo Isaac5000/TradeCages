@@ -1,31 +1,31 @@
 package com.example.examplemod.feature.tradecages.adapters.input;
 
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.level.Level;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.storage.TagValueOutput;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public class VillagerCapturerItem extends Item {
     public VillagerCapturerItem(Properties properties) {
         super(properties);
     }
 
-
     public static boolean hasCapturedVillager(ItemStack stack) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        return customData != null && !customData.isEmpty();
+        return PiglinCapturerItem.hasCapturedPiglin(stack);
     }
 
     public static boolean captureVillager(ItemStack stack, Villager villager) {
@@ -33,29 +33,53 @@ public class VillagerCapturerItem extends Item {
             return false;
         }
 
-        TagValueOutput output = TagValueOutput.createWithoutContext(ProblemReporter.DISCARDING);
-        villager.saveWithoutId(output);
-        CompoundTag villagerData = output.buildResult();
-        // Remove transient data we do not want to persist: position/rotation/motion and lighting.
-        // Also remove hurt/damage state so the stored entity doesn't keep the red hurt tint.
-        // Keep only the semantic data necessary to restore the villager (profession, trades, name, age, etc.).
-        villagerData.remove("Pos");
-        villagerData.remove("Motion");
-        villagerData.remove("Rotation");
-        villagerData.remove("FallDistance");
-        villagerData.remove("Air");
-        villagerData.remove("OnGround");
-        // Remove hurt-related tags that cause the red damage overlay
-        villagerData.remove("HurtTime");
-        villagerData.remove("HurtByTimestamp");
-        villagerData.remove("LastHurtByPlayer");
-        villagerData.remove("LastHurt");
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(villagerData));
+        setCapturedVillagerData(stack, createCapturedVillagerData(villager));
         return true;
     }
 
+    public static CompoundTag createCapturedVillagerData(Villager villager) {
+        TagValueOutput output = TagValueOutput.createWithoutContext(ProblemReporter.DISCARDING);
+        villager.saveWithoutId(output);
+        CompoundTag villagerData = output.buildResult();
+        stripVolatileEntityData(villagerData);
+        return villagerData;
+    }
+
+    public static @Nullable CompoundTag getCapturedVillagerData(ItemStack stack) {
+        return PiglinCapturerItem.getCapturedPiglinData(stack);
+    }
+
+    public static void setCapturedVillagerData(ItemStack stack, CompoundTag villagerData) {
+        CompoundTag cleanData = villagerData.copy();
+        stripVolatileEntityData(cleanData);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(cleanData));
+    }
+
+    public static void clearCapturedVillager(ItemStack stack) {
+        stack.remove(DataComponents.CUSTOM_DATA);
+    }
+
+    public static @Nullable Villager createCapturedVillager(Level level, ItemStack stack, BlockPos position) {
+        CompoundTag villagerData = getCapturedVillagerData(stack);
+        if (villagerData == null) {
+            return null;
+        }
+        return createCapturedVillager(level, villagerData, position);
+    }
+
+    public static @Nullable Villager createCapturedVillager(Level level, CompoundTag villagerData, BlockPos position) {
+        Entity entity = EntityType.loadEntityRecursive(EntityType.VILLAGER, villagerData.copy(), level, EntitySpawnReason.LOAD, loadedEntity -> loadedEntity);
+        if (!(entity instanceof Villager villager)) {
+            return null;
+        }
+
+        villager.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
+        villager.setPersistenceRequired();
+        return villager;
+    }
+
     @Override
-    public InteractionResult useOn(UseOnContext context) {
+    public @NonNull InteractionResult useOn(@NonNull UseOnContext context) {
         ItemStack stack = context.getItemInHand();
         if (!hasCapturedVillager(stack)) {
             return InteractionResult.PASS;
@@ -76,30 +100,26 @@ public class VillagerCapturerItem extends Item {
     }
 
     @Override
-    public boolean isFoil(ItemStack stack) {
+    public boolean isFoil(@NonNull ItemStack stack) {
         return hasCapturedVillager(stack) || super.isFoil(stack);
     }
 
     @Override
-    public Component getName(ItemStack stack) {
+    public @NonNull Component getName(@NonNull ItemStack stack) {
         if (!hasCapturedVillager(stack)) {
             return super.getName(stack);
         }
 
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null || customData.isEmpty()) {
+        CompoundTag tag = getCapturedVillagerData(stack);
+        if (tag == null) {
             return Component.translatable("entity.minecraft.villager.none");
         }
 
-        CompoundTag tag = customData.copyTag();
-
-        // First check if the villager has a custom name
         if (tag.contains("CustomName")) {
             var customNameOpt = tag.getString("CustomName");
             if (customNameOpt.isPresent()) {
                 String customName = customNameOpt.get();
                 if (!customName.isEmpty()) {
-                    // Check if it's a baby villager
                     if (isBabyVillager(tag)) {
                         return Component.translatable("villager.baby", Component.literal(customName));
                     }
@@ -108,11 +128,7 @@ public class VillagerCapturerItem extends Item {
             }
         }
 
-        // If no custom name, use translation based on profession
-        String villagerKey = getVillagerKeyFromTag(tag);
-        Component baseComponent = Component.translatable(villagerKey);
-
-        // Check if it's a baby villager
+        Component baseComponent = Component.translatable(getVillagerKeyFromTag(tag));
         if (isBabyVillager(tag)) {
             return Component.translatable("villager.baby", baseComponent);
         }
@@ -120,79 +136,45 @@ public class VillagerCapturerItem extends Item {
         return baseComponent;
     }
 
-    private static boolean isBabyVillager(CompoundTag tag) {
-        // Check if the villager is a baby
-        if (tag.contains("Age")) {
-            var ageOpt = tag.getInt("Age");
-            if (ageOpt.isPresent() && ageOpt.get() < 0) {
-                return true;
-            }
-        }
-        return false;
+    private static @Nullable Villager releaseVillager(Level level, ItemStack stack, BlockPos position) {
+        return createCapturedVillager(level, stack, position);
     }
 
+    public static boolean isBabyVillager(CompoundTag tag) {
+        return tag.getInt("Age").map(age -> age < 0).orElse(false);
+    }
 
     private static String getVillagerKeyFromTag(CompoundTag tag) {
-        // Check if the villager has profession data
         if (tag.contains("VillagerData")) {
             var villagerDataOpt = tag.getCompound("VillagerData");
             if (villagerDataOpt.isPresent()) {
                 CompoundTag villagerData = villagerDataOpt.get();
-                if (villagerData.contains("profession")) {
-                    var professionIdOpt = villagerData.getString("profession");
-                    if (professionIdOpt.isPresent()) {
-                        String professionId = professionIdOpt.get();
-
-                        // Minecraft already provides these keys automatically
-                        String professionName = professionId.contains(":")
-                            ? professionId.substring(professionId.indexOf(":") + 1)
+                var professionIdOpt = villagerData.getString("profession");
+                if (professionIdOpt.isPresent()) {
+                    String professionId = professionIdOpt.get();
+                    String professionName = professionId.contains(":")
+                            ? professionId.substring(professionId.indexOf(':') + 1)
                             : professionId;
-
-                        return "entity.minecraft.villager." + professionName;
-                    }
+                    return "entity.minecraft.villager." + professionName;
                 }
             }
         }
 
-        // If no VillagerData, use dynamic Minecraft translation
         return "entity.minecraft.villager.none";
     }
 
-    private static Villager releaseVillager(Level level, ItemStack stack, BlockPos position) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null || customData.isEmpty()) {
-            return null;
-        }
-
-        CompoundTag villagerData = customData.copyTag();
-        Entity entity = EntityType.loadEntityRecursive(EntityType.VILLAGER, villagerData, level, EntitySpawnReason.LOAD, loadedEntity -> loadedEntity);
-        if (!(entity instanceof Villager villager)) {
-            return null;
-        }
-
-        villager.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
-        villager.setPersistenceRequired();
-        return villager;
-    }
-
-    private static void clearCapturedVillager(ItemStack stack) {
-        stack.remove(DataComponents.CUSTOM_DATA);
-    }
-
-    public static Villager createCapturedVillager(Level level, ItemStack stack, BlockPos position) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null || customData.isEmpty()) {
-            return null;
-        }
-
-        CompoundTag villagerData = customData.copyTag();
-        Entity entity = EntityType.loadEntityRecursive(EntityType.VILLAGER, villagerData, level, EntitySpawnReason.LOAD, loadedEntity -> loadedEntity);
-        if (!(entity instanceof Villager villager)) {
-            return null;
-        }
-
-        villager.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
-        villager.setPersistenceRequired();
-        return villager;
+    private static void stripVolatileEntityData(CompoundTag entityData) {
+        entityData.remove("Pos");
+        entityData.remove("Motion");
+        entityData.remove("Rotation");
+        entityData.remove("FallDistance");
+        entityData.remove("Air");
+        entityData.remove("OnGround");
+        entityData.remove("HurtTime");
+        entityData.remove("HurtByTimestamp");
+        entityData.remove("LastHurtByPlayer");
+        entityData.remove("LastHurt");
+        entityData.remove("Fire");
+        entityData.remove("PortalCooldown");
     }
 }

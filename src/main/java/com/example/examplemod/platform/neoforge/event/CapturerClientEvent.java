@@ -1,9 +1,13 @@
 package com.example.examplemod.platform.neoforge.event;
 
+import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
+import com.example.examplemod.feature.tradecages.adapters.output.client.PiglinBarteringCellBlockEntityRenderer;
 import com.example.examplemod.feature.tradecages.adapters.output.client.PiglinCapturerItemRenderSupport;
+import com.example.examplemod.feature.tradecages.adapters.output.client.TradingCellBlockEntityRenderer;
 import com.example.examplemod.feature.tradecages.adapters.output.client.VillagerCapturerItemRenderSupport;
 import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
 import net.minecraft.resources.Identifier;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterSpecialModelRendererEvent;
 
 public final class CapturerClientEvent {
@@ -26,6 +30,17 @@ public final class CapturerClientEvent {
         register(event, "piglin_capturer_on_shelf", PiglinCapturerItemRenderSupport.OnShelf.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_third_person", PiglinCapturerItemRenderSupport.ThirdPerson.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_first_person", PiglinCapturerItemRenderSupport.FirstPerson.Unbaked.MAP_CODEC);
+    }
+
+    public static void onRegisterBlockEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(
+                TradingCellsRegistrationAdapter.VILLAGER_TRADING_CELL_BLOCK_ENTITY.get(),
+                TradingCellBlockEntityRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                TradingCellsRegistrationAdapter.PIGLIN_BARTERING_CELL_BLOCK_ENTITY.get(),
+                PiglinBarteringCellBlockEntityRenderer::new
+        );
     }
 
     private static void register(RegisterSpecialModelRendererEvent event, String path, com.mojang.serialization.MapCodec<? extends net.minecraft.client.renderer.special.SpecialModelRenderer.Unbaked<?>> codec) {

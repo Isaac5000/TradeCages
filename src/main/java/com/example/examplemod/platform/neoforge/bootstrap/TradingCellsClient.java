@@ -18,6 +18,7 @@ public class TradingCellsClient {
         var modBus = container.getEventBus();
         if (modBus != null) {
             modBus.addListener(CapturerClientEvent::onRegisterSpecialModelRenderer);
+            modBus.addListener(CapturerClientEvent::onRegisterBlockEntityRenderers);
         }
         // RenderHand handling removed — rendering is handled by SpecialModelRenderers selected by JSON.
     }

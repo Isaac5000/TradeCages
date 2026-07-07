@@ -3,7 +3,7 @@ import math
 import struct
 import zlib
 
-OUT = Path(r"C:\Users\Isaac\Desktop\ProgramarMinecraft\TradeCages\src\main\resources\assets\trade_cages\textures\item\villager_capturer.png")
+OUT = Path("src/main/resources/assets/trading_cells/textures/item/villager_capturer.png")
 W = H = 32
 CX = CY = 15.5
 R = 13.2

@@ -51,40 +51,74 @@ public final class VillagerCapturerItemRenderSupport {
     // in each display context (GUI, first/third person, fixed/item-frame, on_shelf).
     // This is the easiest place to find and tune scale & rotation.
     // ---------------------------------------------------------------------
-    private static final Map<SpecialProfile, Transform> TRANSFORMS = new EnumMap<>(SpecialProfile.class);
-
-    // No per-species transforms in minimal implementation
+    private static final Map<SpecialProfile, Transform> ADULT_TRANSFORMS = new EnumMap<>(SpecialProfile.class);
+    private static final Map<SpecialProfile, Transform> BABY_TRANSFORMS = new EnumMap<>(SpecialProfile.class);
 
     static {
-        TRANSFORMS.put(SpecialProfile.FIRST_PERSON,
-                new Transform(0.5F,
-                2.0D, 0.0D, 0.0D,
-                -5.0F, 320.0F, 0.0F));
+        // Primera persona: la entidad se renderiza sobre el icono del capturador.
+        // El ajuste anterior quedaba fuera del centro visible de la mano: demasiado bajo y a la derecha.
+        // Adulto y bebé comparten posición/rotación; solo cambia la escala para compensar la altura real del modelo.
+        ADULT_TRANSFORMS.put(SpecialProfile.FIRST_PERSON,
+                new Transform(0.32F,
+                        -0.80D, 0.15D, -0.35D,
+                        0.0F, 25.0F, 0.0F));
 
-        TRANSFORMS.put(SpecialProfile.THIRD_PERSON,
+        BABY_TRANSFORMS.put(SpecialProfile.FIRST_PERSON,
+                new Transform(0.32F,
+                        -0.80D, 0.15D, -0.35D,
+                        0.0F, 25.0F, 0.0F));
+
+        ADULT_TRANSFORMS.put(SpecialProfile.THIRD_PERSON,
                 new Transform(0.26F,
-                        1.7D, 1.7D, 2.2D,
+                        1.7D, 0.6D, 2.2D,
                         0.0F, 0.0F, 0.0F));
 
-        TRANSFORMS.put(SpecialProfile.GUI,
+        BABY_TRANSFORMS.put(SpecialProfile.THIRD_PERSON,
+                new Transform(0.36F,
+                        1.25D, 0.6D, 1.7D,
+                        0.0F, 0.0F, 0.0F));
+
+        ADULT_TRANSFORMS.put(SpecialProfile.GUI,
                 new Transform(0.4F,
                         1.20D, 0.2D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
-        TRANSFORMS.put(SpecialProfile.FIXED,
+        BABY_TRANSFORMS.put(SpecialProfile.GUI,
+                new Transform(0.52F,
+                        0.95D, 0.28D, 0.0D,
+                        0.0F, 0.0F, 0.0F));
+
+        ADULT_TRANSFORMS.put(SpecialProfile.FIXED,
                 new Transform(0.4F,
                         1.2D, 0.0D, 1.2D,
-                        0.0F, 180.0F, 0.0F));
+                        0.0F, 0.0F, 0.0F));
 
-        TRANSFORMS.put(SpecialProfile.ON_SHELF,
+        BABY_TRANSFORMS.put(SpecialProfile.FIXED,
+                new Transform(0.52F,
+                        0.95D, 0.0D, 0.95D,
+                        0.0F, 0.0F, 0.0F));
+
+        ADULT_TRANSFORMS.put(SpecialProfile.ON_SHELF,
                 new Transform(0.80F,
                         0.6D, -0.4D, 0.5D,
                         0.0F, 0.0F, 0.0F));
 
-        TRANSFORMS.put(SpecialProfile.DEFAULT,
+        BABY_TRANSFORMS.put(SpecialProfile.ON_SHELF,
+                new Transform(1.0F,
+                        0.48D, -0.25D, 0.42D,
+                        0.0F, 0.0F, 0.0F));
+
+        ADULT_TRANSFORMS.put(SpecialProfile.DEFAULT,
                 new Transform(0.45F,
                         1.1D, 0.0D, 1.2D,
                         0.0F, 180.0F, 0.0F));
+
+        BABY_TRANSFORMS.put(SpecialProfile.DEFAULT,
+                new Transform(0.58F,
+                        0.85D, 0.0D, 0.95D,
+                        0.0F, 180.0F, 0.0F));
+        BABY_TRANSFORMS.clear();
+        BABY_TRANSFORMS.putAll(ADULT_TRANSFORMS);
     }
 
     // getProfileTransform intentionally removed to reduce public surface; use TRANSFORMS directly
@@ -149,7 +183,7 @@ public final class VillagerCapturerItemRenderSupport {
             SpecialProfile profileToUse = (displayContext == null) ? specialProfile : mapDisplayContextToProfile(displayContext);
             // Delegate adult vs baby rendering to separate helpers for clarity.
             // Render both adults and babies identically: use the same render path
-            return renderAdultVillager(villager, poseStack, renderOutput, partialTick, profileToUse);
+            return renderVillagerEntity(villager, poseStack, renderOutput, partialTick, profileToUse, params.packedLight());
         } catch (Exception e) {
             TradingCells.LOGGER.error("[VillagerCapturer] Excepción en el renderizado del aldeano", e);
             return false;
@@ -178,9 +212,9 @@ public final class VillagerCapturerItemRenderSupport {
         };
     }
 
-    private static Transform getTransformForEntity(SpecialProfile profile) {
-        // Minimal: use profile-level defaults for all entities (adult and baby)
-        return TRANSFORMS.getOrDefault(profile, TRANSFORMS.get(SpecialProfile.DEFAULT));
+    private static Transform getTransformForEntity(SpecialProfile profile, boolean baby) {
+        Map<SpecialProfile, Transform> transforms = baby ? BABY_TRANSFORMS : ADULT_TRANSFORMS;
+        return transforms.getOrDefault(profile, transforms.get(SpecialProfile.DEFAULT));
     }
 
     private static void applyTransform(PoseStack poseStack, Transform t) {
@@ -191,19 +225,13 @@ public final class VillagerCapturerItemRenderSupport {
         if (t.rotZ() != 0.0F) poseStack.mulPose(Axis.ZP.rotationDegrees(t.rotZ()));
     }
 
-    // Separate rendering helpers for adult and baby villagers so future behavior
-    // can diverge without touching the shared code path.
-    private static boolean renderAdultVillager(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
-        Transform transform = getTransformForEntity(profile);
+    private static boolean renderVillagerEntity(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
+        Transform transform = getTransformForEntity(profile, villager.isBaby());
         applyTransform(poseStack, transform);
-        // Render with a default fixed orientation (ignore the original entity's look direction).
-        // Save/restore rotation state so we don't mutate the captured entity permanently.
-        return orientationFixer(villager, poseStack, renderOutput, partialTick, profile);
+        return orientationFixer(villager, poseStack, renderOutput, partialTick, profile, packedLight);
     }
 
-    // Babies render exactly like adults in this minimal implementation; no separate method required.
-
-    private static boolean orientationFixer(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile) {
+    private static boolean orientationFixer(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
         // Save current rotation-related state that is accessible
         float prevYHeadRot = villager.yHeadRot;
         float prevYBodyRot = villager.yBodyRot;
@@ -220,7 +248,7 @@ public final class VillagerCapturerItemRenderSupport {
             villager.yHeadRotO = 0.0F;
             villager.yBodyRotO = 0.0F;
             // Ignore any stored lighting or pose; render a neutral texture-only preview.
-            return RENDER_BACKEND.render(villager, poseStack, renderOutput, partialTick, profile, 0);
+            return RENDER_BACKEND.render(villager, poseStack, renderOutput, partialTick, profile, packedLight);
         } finally {
             // Restore saved state exactly to the same fields we modified
             villager.yHeadRot = prevYHeadRot;
@@ -288,8 +316,8 @@ public final class VillagerCapturerItemRenderSupport {
                     extents.accept(new Vector3f(0.5F, 1.0F, 0.5F));
                 }
                 case FIRST_PERSON -> {
-                    extents.accept(new Vector3f(-0.3F, 0.0F, -0.3F));
-                    extents.accept(new Vector3f(0.3F, 0.9F, 0.3F));
+                    extents.accept(new Vector3f(-2.0F, -2.0F, -2.0F));
+                    extents.accept(new Vector3f(2.0F, 2.0F, 2.0F));
                 }
                 case THIRD_PERSON -> {
                     extents.accept(new Vector3f(-0.45F, 0.0F, -0.45F));
@@ -393,25 +421,22 @@ public final class VillagerCapturerItemRenderSupport {
      * Internal backend adapter moved into this file so nobody has to jump between files.
      */
     public static final class MinecraftVillagerCapturerRenderBackend {
-        public boolean render(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int capturedLight) {
+        public boolean render(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
             if (!(renderOutput instanceof SubmitNodeCollector submitNodeCollector)) {
                 return false;
             }
 
             Minecraft mc = Minecraft.getInstance();
             net.minecraft.client.renderer.state.level.CameraRenderState cameraState = new net.minecraft.client.renderer.state.level.CameraRenderState();
-            // GUI (inventory/hotbar) -> force max brightness so the item preview is clearly visible.
-            // Other profiles: use world lighting (initialized = false) so hand/world previews follow environment.
-            if (profile == SpecialProfile.GUI) {
-                cameraState.initialized = true;
+            cameraState.initialized = profile == SpecialProfile.GUI;
+            if (cameraState.initialized) {
                 trySetCameraLight(cameraState, "blockLight", 15);
                 trySetCameraLight(cameraState, "skyLight", 15);
-            } else {
-                cameraState.initialized = false;
             }
 
             EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
             EntityRenderState state = dispatcher.extractEntity(villager, partialTick);
+            state.lightCoords = profile == SpecialProfile.GUI ? 15728880 : packedLight;
             dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
             return true;
         }
@@ -420,7 +445,7 @@ public final class VillagerCapturerItemRenderSupport {
             try {
                 java.lang.reflect.Field f = cameraState.getClass().getField(fieldName);
                 f.setInt(cameraState, value);
-            } catch (NoSuchFieldException | IllegalAccessException _) {
+            } catch (NoSuchFieldException | IllegalAccessException ignored) {
                 // ignore if field not present in this mapping/version
             }
         }
