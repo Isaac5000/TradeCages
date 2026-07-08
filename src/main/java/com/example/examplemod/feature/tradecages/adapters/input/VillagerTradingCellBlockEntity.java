@@ -679,7 +679,7 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
         private @Nullable UUID currentTradingPlayerId;
 
         private TradingCellVillager(Level level, VillagerTradingCellBlockEntity owner) {
-            super(EntityType.VILLAGER, level);
+            super(CapturedEntityTypes.villagerType(), level);
             this.owner = owner;
         }
 

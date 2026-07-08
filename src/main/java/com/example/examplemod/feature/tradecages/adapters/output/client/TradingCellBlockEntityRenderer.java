@@ -77,6 +77,7 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
         }
 
         orientForCellPreview(entity, state.facing.toYRot());
+        PreviewEntityRenderUtil.preparePreviewEntity(entity);
         state.displayEntity = entityRenderer.extractEntity(entity, partialTicks);
         state.displayEntity.lightCoords = state.lightCoords;
         state.displayEntity.shadowRadius = 0.0F;

@@ -117,8 +117,6 @@ public final class VillagerCapturerItemRenderSupport {
                 new Transform(0.58F,
                         0.85D, 0.0D, 0.95D,
                         0.0F, 180.0F, 0.0F));
-        BABY_TRANSFORMS.clear();
-        BABY_TRANSFORMS.putAll(ADULT_TRANSFORMS);
     }
 
     // getProfileTransform intentionally removed to reduce public surface; use TRANSFORMS directly
@@ -137,15 +135,15 @@ public final class VillagerCapturerItemRenderSupport {
      * Render usado por los item models "minecraft:special".
      * Permite perfilar el ajuste base (por ejemplo, 1ª persona vs el resto).
      */
-    public static boolean renderVillagerSpecial(ItemStack stack, PoseStack poseStack, Object renderOutput, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
-        RenderParams params = new RenderParams(null, poseStack, renderOutput, packedLight, packedOverlay, partialTick, profile);
+    public static boolean renderVillagerSpecial(ItemStack stack, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
+        RenderParams params = new RenderParams(null, poseStack, submitNodeCollector, packedLight, packedOverlay, partialTick, profile);
         return renderVillagerInternal(stack, params);
     }
 
     // Parameter object to avoid long parameter lists and group rendering parameters.
         private record RenderParams(ItemDisplayContext displayContext,
                                     PoseStack poseStack,
-                                    Object renderOutput,
+                                    SubmitNodeCollector submitNodeCollector,
                                     int packedLight,
                                     int packedOverlay,
                                     float partialTick,
@@ -155,7 +153,7 @@ public final class VillagerCapturerItemRenderSupport {
     private static boolean renderVillagerInternal(ItemStack stack, RenderParams params) {
         ItemDisplayContext displayContext = params.displayContext;
         PoseStack poseStack = params.poseStack;
-        Object renderOutput = params.renderOutput;
+        SubmitNodeCollector submitNodeCollector = params.submitNodeCollector;
         float partialTick = params.partialTick;
         SpecialProfile specialProfile = params.specialProfile;
         Level level = Minecraft.getInstance().level;
@@ -183,9 +181,9 @@ public final class VillagerCapturerItemRenderSupport {
             SpecialProfile profileToUse = (displayContext == null) ? specialProfile : mapDisplayContextToProfile(displayContext);
             // Delegate adult vs baby rendering to separate helpers for clarity.
             // Render both adults and babies identically: use the same render path
-            return renderVillagerEntity(villager, poseStack, renderOutput, partialTick, profileToUse, params.packedLight());
+            return renderVillagerEntity(villager, poseStack, submitNodeCollector, partialTick, profileToUse, params.packedLight());
         } catch (Exception e) {
-            TradingCells.LOGGER.error("[VillagerCapturer] Excepción en el renderizado del aldeano", e);
+            TradingCells.LOGGER.debug("[VillagerCapturer] No se pudo renderizar el aldeano capturado: {}", e.toString());
             return false;
         } finally {
             poseStack.popPose();
@@ -225,13 +223,13 @@ public final class VillagerCapturerItemRenderSupport {
         if (t.rotZ() != 0.0F) poseStack.mulPose(Axis.ZP.rotationDegrees(t.rotZ()));
     }
 
-    private static boolean renderVillagerEntity(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
+    private static boolean renderVillagerEntity(Villager villager, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
         Transform transform = getTransformForEntity(profile, villager.isBaby());
         applyTransform(poseStack, transform);
-        return orientationFixer(villager, poseStack, renderOutput, partialTick, profile, packedLight);
+        return orientationFixer(villager, poseStack, submitNodeCollector, partialTick, profile, packedLight);
     }
 
-    private static boolean orientationFixer(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
+    private static boolean orientationFixer(Villager villager, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
         // Save current rotation-related state that is accessible
         float prevYHeadRot = villager.yHeadRot;
         float prevYBodyRot = villager.yBodyRot;
@@ -248,7 +246,7 @@ public final class VillagerCapturerItemRenderSupport {
             villager.yHeadRotO = 0.0F;
             villager.yBodyRotO = 0.0F;
             // Ignore any stored lighting or pose; render a neutral texture-only preview.
-            return RENDER_BACKEND.render(villager, poseStack, renderOutput, partialTick, profile, packedLight);
+            return RENDER_BACKEND.render(villager, poseStack, submitNodeCollector, partialTick, profile, packedLight);
         } finally {
             // Restore saved state exactly to the same fields we modified
             villager.yHeadRot = prevYHeadRot;
@@ -301,7 +299,7 @@ public final class VillagerCapturerItemRenderSupport {
                         profile
                 );
             } catch (Exception e) {
-                TradingCells.LOGGER.error("[VillagerCapturer] Error al renderizar aldeano (profile {})", profile, e);
+                TradingCells.LOGGER.debug("[VillagerCapturer] Error al renderizar aldeano (profile {}): {}", profile, e.toString());
             }
             if (!rendered) {
                 TradingCells.LOGGER.trace("[VillagerCapturer] No se pudo renderizar el aldeano (profile {}), usando textura vanilla.", profile);
@@ -421,33 +419,17 @@ public final class VillagerCapturerItemRenderSupport {
      * Internal backend adapter moved into this file so nobody has to jump between files.
      */
     public static final class MinecraftVillagerCapturerRenderBackend {
-        public boolean render(Villager villager, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
-            if (!(renderOutput instanceof SubmitNodeCollector submitNodeCollector)) {
-                return false;
-            }
-
+        public boolean render(Villager villager, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
             Minecraft mc = Minecraft.getInstance();
             net.minecraft.client.renderer.state.level.CameraRenderState cameraState = new net.minecraft.client.renderer.state.level.CameraRenderState();
             cameraState.initialized = profile == SpecialProfile.GUI;
-            if (cameraState.initialized) {
-                trySetCameraLight(cameraState, "blockLight", 15);
-                trySetCameraLight(cameraState, "skyLight", 15);
-            }
 
             EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+            PreviewEntityRenderUtil.preparePreviewEntity(villager);
             EntityRenderState state = dispatcher.extractEntity(villager, partialTick);
             state.lightCoords = profile == SpecialProfile.GUI ? 15728880 : packedLight;
             dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
             return true;
-        }
-
-        private static void trySetCameraLight(net.minecraft.client.renderer.state.level.CameraRenderState cameraState, String fieldName, int value) {
-            try {
-                java.lang.reflect.Field f = cameraState.getClass().getField(fieldName);
-                f.setInt(cameraState, value);
-            } catch (NoSuchFieldException | IllegalAccessException ignored) {
-                // ignore if field not present in this mapping/version
-            }
         }
     }
 

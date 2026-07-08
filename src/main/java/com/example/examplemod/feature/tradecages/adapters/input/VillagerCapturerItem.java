@@ -6,9 +6,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -68,7 +66,13 @@ public class VillagerCapturerItem extends Item {
     }
 
     public static @Nullable Villager createCapturedVillager(Level level, CompoundTag villagerData, BlockPos position) {
-        Entity entity = EntityType.loadEntityRecursive(EntityType.VILLAGER, villagerData.copy(), level, EntitySpawnReason.LOAD, loadedEntity -> loadedEntity);
+        var entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(
+                CapturedEntityTypes.villagerType(),
+                villagerData.copy(),
+                level,
+                EntitySpawnReason.LOAD,
+                loadedEntity -> loadedEntity
+        );
         if (!(entity instanceof Villager villager)) {
             return null;
         }

@@ -105,15 +105,13 @@ public final class PiglinCapturerItemRenderSupport {
                 new Transform(0.60F,
                         0.82D, 0.0D, 0.90D,
                         0.0F, 180.0F, 0.0F));
-        BABY_TRANSFORMS.clear();
-        BABY_TRANSFORMS.putAll(ADULT_TRANSFORMS);
     }
 
     // getProfileTransform intentionally removed to reduce public surface; use TRANSFORMS directly
 
     private record RenderParams(ItemDisplayContext displayContext,
                                 PoseStack poseStack,
-                                Object renderOutput,
+                                SubmitNodeCollector submitNodeCollector,
                                 int packedLight,
                                 int packedOverlay,
                                 float partialTick,
@@ -121,15 +119,15 @@ public final class PiglinCapturerItemRenderSupport {
 
     // Convenience overloads removed; use renderPiglinSpecial(...) or internal entrypoint.
 
-    public static boolean renderPiglinSpecial(ItemStack stack, PoseStack poseStack, Object renderOutput, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
-        RenderParams params = new RenderParams(null, poseStack, renderOutput, packedLight, packedOverlay, partialTick, profile);
+    public static boolean renderPiglinSpecial(ItemStack stack, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int packedLight, int packedOverlay, float partialTick, SpecialProfile profile) {
+        RenderParams params = new RenderParams(null, poseStack, submitNodeCollector, packedLight, packedOverlay, partialTick, profile);
         return renderPiglinInternal(stack, params);
     }
 
     private static boolean renderPiglinInternal(ItemStack stack, RenderParams params) {
         ItemDisplayContext displayContext = params.displayContext;
         PoseStack poseStack = params.poseStack;
-        Object renderOutput = params.renderOutput;
+        SubmitNodeCollector submitNodeCollector = params.submitNodeCollector;
         float partialTick = params.partialTick;
         SpecialProfile specialProfile = params.specialProfile;
         Level level = Minecraft.getInstance().level;
@@ -151,9 +149,9 @@ public final class PiglinCapturerItemRenderSupport {
         poseStack.pushPose();
         try {
             SpecialProfile profileToUse = (displayContext == null) ? specialProfile : mapDisplayContextToProfile(displayContext);
-            return renderPiglinEntity(piglin, poseStack, renderOutput, partialTick, profileToUse, params.packedLight());
+            return renderPiglinEntity(piglin, poseStack, submitNodeCollector, partialTick, profileToUse, params.packedLight());
         } catch (Exception e) {
-            TradingCells.LOGGER.error("[PiglinCapturer] Excepción en el renderizado del piglin", e);
+            TradingCells.LOGGER.debug("[PiglinCapturer] No se pudo renderizar el piglin capturado: {}", e.toString());
             return false;
         } finally {
             poseStack.popPose();
@@ -183,13 +181,13 @@ public final class PiglinCapturerItemRenderSupport {
         if (t.rotZ() != 0.0F) poseStack.mulPose(Axis.ZP.rotationDegrees(t.rotZ()));
     }
 
-    private static boolean renderPiglinEntity(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
+    private static boolean renderPiglinEntity(Piglin piglin, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
         Transform transform = getTransformForEntity(profile, piglin.isBaby());
         applyTransform(poseStack, transform);
-        return orientationFixer(piglin, poseStack, renderOutput, partialTick, profile, packedLight);
+        return orientationFixer(piglin, poseStack, submitNodeCollector, partialTick, profile, packedLight);
     }
 
-    private static boolean orientationFixer(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
+    private static boolean orientationFixer(Piglin piglin, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
         // Save accessible rotation-related fields
         float prevYHeadRot = piglin.yHeadRot;
         float prevYBodyRot = piglin.yBodyRot;
@@ -206,7 +204,7 @@ public final class PiglinCapturerItemRenderSupport {
             piglin.yHeadRotO = 0.0F;
             piglin.yBodyRotO = 0.0F;
             // We ignore any stored lighting or pose. Backend renders a neutral, texture-only preview.
-            return RENDER_BACKEND.render(piglin, poseStack, renderOutput, partialTick, profile, packedLight);
+            return RENDER_BACKEND.render(piglin, poseStack, submitNodeCollector, partialTick, profile, packedLight);
         } finally {
             piglin.yHeadRot = prevYHeadRot;
             piglin.yBodyRot = prevYBodyRot;
@@ -231,7 +229,7 @@ public final class PiglinCapturerItemRenderSupport {
             try {
                 rendered = renderPiglinSpecial(stack, poseStack, submitNodeCollector, packedLight, packedOverlay, 0.0F, profile);
             } catch (Exception e) {
-                TradingCells.LOGGER.error("[PiglinCapturer] Error al renderizar piglin (profile {})", profile, e);
+                TradingCells.LOGGER.debug("[PiglinCapturer] Error al renderizar piglin (profile {}): {}", profile, e.toString());
             }
             if (!rendered) {
                 TradingCells.LOGGER.trace("[PiglinCapturer] No se pudo renderizar el piglin (profile {}), usando textura vanilla.", profile);
@@ -320,29 +318,16 @@ public final class PiglinCapturerItemRenderSupport {
     }
 
     public static final class MinecraftPiglinCapturerRenderBackend {
-        public boolean render(Piglin piglin, PoseStack poseStack, Object renderOutput, float partialTick, SpecialProfile profile, int packedLight) {
-            if (!(renderOutput instanceof SubmitNodeCollector submitNodeCollector)) { return false; }
+        public boolean render(Piglin piglin, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, float partialTick, SpecialProfile profile, int packedLight) {
             Minecraft mc = Minecraft.getInstance();
             net.minecraft.client.renderer.state.level.CameraRenderState cameraState = new net.minecraft.client.renderer.state.level.CameraRenderState();
             cameraState.initialized = profile == SpecialProfile.GUI;
-            if (cameraState.initialized) {
-                trySetCameraLight(cameraState, "blockLight", 15);
-                trySetCameraLight(cameraState, "skyLight", 15);
-            }
             EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+            PreviewEntityRenderUtil.preparePreviewEntity(piglin);
             EntityRenderState state = dispatcher.extractEntity(piglin, partialTick);
             state.lightCoords = profile == SpecialProfile.GUI ? 15728880 : packedLight;
             dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
             return true;
-        }
-
-        private static void trySetCameraLight(net.minecraft.client.renderer.state.level.CameraRenderState cameraState, String fieldName, int value) {
-            try {
-                java.lang.reflect.Field f = cameraState.getClass().getField(fieldName);
-                f.setInt(cameraState, value);
-            } catch (NoSuchFieldException | IllegalAccessException ignored) {
-                // ignore
-            }
         }
     }
 }

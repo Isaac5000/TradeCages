@@ -67,8 +67,8 @@ Si el aldeano aún no tiene profesión persistente, el POI interno define su pro
 
 ## Requisitos
 
-- Minecraft `26.1.2`
-- NeoForge `26.1.2.43-beta`
+- Minecraft `26.2.0`
+- NeoForge `26.2.0.8-beta`
 - Java `25`
 
 ## Desarrollo

@@ -6,9 +6,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -73,7 +71,13 @@ public class PiglinCapturerItem extends Item {
     }
 
     public static @Nullable Piglin createCapturedPiglin(Level level, CompoundTag piglinData, BlockPos position) {
-        Entity entity = EntityType.loadEntityRecursive(EntityType.PIGLIN, piglinData.copy(), level, EntitySpawnReason.LOAD, loadedEntity -> loadedEntity);
+        var entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(
+                CapturedEntityTypes.piglinType(),
+                piglinData.copy(),
+                level,
+                EntitySpawnReason.LOAD,
+                loadedEntity -> loadedEntity
+        );
         if (!(entity instanceof Piglin piglin)) {
             return null;
         }

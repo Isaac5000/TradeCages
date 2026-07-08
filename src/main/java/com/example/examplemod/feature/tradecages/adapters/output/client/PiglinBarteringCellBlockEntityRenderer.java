@@ -54,6 +54,7 @@ public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntity
         }
 
         orientForCellPreview(piglin, state.facing.toYRot());
+        PreviewEntityRenderUtil.preparePreviewEntity(piglin);
         state.displayPiglin = entityRenderer.extractEntity(piglin, partialTicks);
         state.displayPiglin.lightCoords = state.lightCoords;
         state.displayPiglin.shadowRadius = 0.0F;
