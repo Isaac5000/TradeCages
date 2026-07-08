@@ -128,6 +128,10 @@ public class PiglinBarteringCellBlock extends BaseEntityBlock {
             return InteractionResult.FAIL;
         }
 
+        if (cell.hasOutput()) {
+            return cell.extractOutputToPlayer(player);
+        }
+
         player.sendSystemMessage(Component.translatable(cell.hasPiglin()
                 ? "message.trading_cells.piglin_barter_hint"
                 : "message.trading_cells.cell_empty"));

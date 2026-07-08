@@ -41,5 +41,9 @@
   "message.trading_cells.piglin_bartered": "Piglin barter completed.",
   "message.trading_cells.piglin_barter_failed": "This piglin did not return any barter item.",
   "message.trading_cells.piglin_barter_hint": "Use a gold ingot on this cell to barter with the stored piglin.",
-  "message.trading_cells.use_piglin_bartering_cell": "Use the piglin bartering cell for captured piglins."
+  "message.trading_cells.use_piglin_bartering_cell": "Use the piglin bartering cell for captured piglins.",
+  "message.trading_cells.piglin_barter_started": "The piglin takes the gold ingot.",
+  "message.trading_cells.piglin_barter_busy": "The piglin is already bartering.",
+  "message.trading_cells.piglin_barter_output_pending": "Take the previous barter result before giving more gold.",
+  "message.trading_cells.piglin_barter_output_taken": "Barter result taken."
 }

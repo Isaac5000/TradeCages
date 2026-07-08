@@ -2,8 +2,10 @@ package com.example.examplemod.feature.tradecages.adapters.input;
 
 import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -13,9 +15,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.npc.villager.VillagerData;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -23,7 +27,6 @@ import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -34,6 +37,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 public class VillagerTradingCellBlockEntity extends BlockEntity {
@@ -144,23 +148,6 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
         refreshVillagerProfessionFromPoi();
         VillagerCapturerItem.clearCapturedVillager(stack);
         player.sendSystemMessage(Component.translatable("message.trading_cells.villager_inserted"));
-        return InteractionResult.SUCCESS_SERVER;
-    }
-
-    public InteractionResult insertPiglinFromCapturer(ItemStack stack, Player player) {
-        if (hasStoredEntity()) {
-            player.sendSystemMessage(Component.translatable("message.trading_cells.cell_occupied"));
-            return InteractionResult.SUCCESS_SERVER;
-        }
-
-        CompoundTag piglinData = PiglinCapturerItem.getCapturedPiglinData(stack);
-        if (piglinData == null) {
-            return InteractionResult.PASS;
-        }
-
-        setStoredEntity(StoredEntityKind.PIGLIN, piglinData);
-        PiglinCapturerItem.clearCapturedPiglin(stack);
-        player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_inserted"));
         return InteractionResult.SUCCESS_SERVER;
     }
 
@@ -587,28 +574,38 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
         villagerData.putInt(XP_TAG, 0);
     }
 
-    private static @Nullable String getProfessionForPoiStack(ItemStack stack) {
-        if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
+    private @Nullable String getProfessionForPoiStack(ItemStack stack) {
+        if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem) || level == null) {
             return null;
         }
-        return getProfessionForPoiBlock(blockItem.getBlock());
+
+        return blockItem.getBlock()
+                .getStateDefinition()
+                .getPossibleStates()
+                .stream()
+                .map(this::getProfessionForPoiState)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
-    private static @Nullable String getProfessionForPoiBlock(Block block) {
-        if (block == Blocks.BARREL) return "minecraft:fisherman";
-        if (block == Blocks.BLAST_FURNACE) return "minecraft:armorer";
-        if (block == Blocks.BREWING_STAND) return "minecraft:cleric";
-        if (block == Blocks.CARTOGRAPHY_TABLE) return "minecraft:cartographer";
-        if (block == Blocks.CAULDRON) return "minecraft:leatherworker";
-        if (block == Blocks.COMPOSTER) return "minecraft:farmer";
-        if (block == Blocks.FLETCHING_TABLE) return "minecraft:fletcher";
-        if (block == Blocks.GRINDSTONE) return "minecraft:weaponsmith";
-        if (block == Blocks.LECTERN) return "minecraft:librarian";
-        if (block == Blocks.LOOM) return "minecraft:shepherd";
-        if (block == Blocks.SMITHING_TABLE) return "minecraft:toolsmith";
-        if (block == Blocks.SMOKER) return "minecraft:butcher";
-        if (block == Blocks.STONECUTTER) return "minecraft:mason";
-        return null;
+    private @Nullable String getProfessionForPoiState(BlockState poiState) {
+        Holder<PoiType> poiType = PoiTypes.forState(poiState).orElse(null);
+        if (poiType == null) {
+            return null;
+        }
+
+        return level.registryAccess()
+                .lookupOrThrow(Registries.VILLAGER_PROFESSION)
+                .listElements()
+                .filter(profession -> !profession.is(VillagerProfession.NONE))
+                .filter(profession -> !profession.is(VillagerProfession.NITWIT))
+                .filter(profession -> profession.value().heldJobSite().test(poiType)
+                        || profession.value().acquirableJobSite().test(poiType))
+                .findFirst()
+                .flatMap(Holder::unwrapKey)
+                .map(key -> key.identifier().toString())
+                .orElse(null);
     }
 
     private void registerTradingPlayer(Player player) {
@@ -619,12 +616,6 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
 
     private static void unregisterTradingPlayer(UUID playerId) {
         OPEN_TRADING_CELLS_BY_PLAYER.remove(playerId);
-    }
-
-    private void ownerSafeSave(TradingCellVillager villager) {
-        merchantVillager = villager;
-        saveProxyToStoredData();
-        markChangedAndSync();
     }
 
     private void clearStoredEntity() {

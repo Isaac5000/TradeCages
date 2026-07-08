@@ -1,11 +1,6 @@
 package com.example.examplemod.feature.tradecages.adapters.output.client;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
-import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Pose;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -39,44 +34,4 @@ final class PreviewEntityRenderUtil {
         entity.setInvisible(false);
     }
 
-    static void sanitizePreviewState(EntityRenderState state, int lightCoords) {
-        state.lightCoords = lightCoords;
-        state.outlineColor = EntityRenderState.NO_OUTLINE;
-        state.displayFireAnimation = false;
-        state.isInvisible = false;
-        state.isDiscrete = false;
-        state.nameTag = null;
-        state.scoreText = null;
-        state.nameTagAttachment = null;
-        state.passengerOffset = null;
-        state.leashStates = null;
-        state.shadowRadius = 0.0F;
-        state.shadowPieces.clear();
-
-        if (state instanceof LivingEntityRenderState livingState) {
-            livingState.deathTime = 0.0F;
-            livingState.walkAnimationPos = 0.0F;
-            livingState.walkAnimationSpeed = 0.0F;
-            livingState.ticksSinceKineticHitFeedback = 0.0F;
-            livingState.isUpsideDown = false;
-            livingState.isFullyFrozen = false;
-            livingState.isAutoSpinAttack = false;
-            livingState.hasRedOverlay = false;
-            livingState.isInvisibleToPlayer = false;
-            livingState.bedOrientation = null;
-            livingState.pose = Pose.STANDING;
-        }
-    }
-
-    static CameraRenderState cameraForPreview(boolean guiPreview) {
-        Minecraft minecraft = Minecraft.getInstance();
-        CameraRenderState currentCamera = minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
-        if (currentCamera != null && currentCamera.initialized && !guiPreview) {
-            return currentCamera;
-        }
-
-        CameraRenderState fallbackCamera = new CameraRenderState();
-        fallbackCamera.initialized = true;
-        return fallbackCamera;
-    }
 }

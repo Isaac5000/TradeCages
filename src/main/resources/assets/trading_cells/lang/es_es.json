@@ -41,5 +41,9 @@
   "message.trading_cells.piglin_bartered": "Trueque de piglin completado.",
   "message.trading_cells.piglin_barter_failed": "Este piglin no ha devuelto ningún objeto de trueque.",
   "message.trading_cells.piglin_barter_hint": "Usa un lingote de oro en esta jaula para hacer trueque con el piglin guardado.",
-  "message.trading_cells.use_piglin_bartering_cell": "Usa la jaula de trueque de piglins para los piglins capturados."
+  "message.trading_cells.use_piglin_bartering_cell": "Usa la jaula de trueque de piglins para los piglins capturados.",
+  "message.trading_cells.piglin_barter_started": "El piglin coge el lingote de oro.",
+  "message.trading_cells.piglin_barter_busy": "El piglin ya está haciendo un trueque.",
+  "message.trading_cells.piglin_barter_output_pending": "Retira el resultado anterior del trueque antes de darle más oro.",
+  "message.trading_cells.piglin_barter_output_taken": "Resultado del trueque retirado."
 }
