@@ -173,7 +173,9 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
             return InteractionResult.FAIL;
         }
 
-        VillagerCapturerItem.setCapturedVillagerData(stack, villagerData);
+        ItemStack targetStack = createSingleCapturerTarget(stack);
+        VillagerCapturerItem.setCapturedVillagerData(targetStack, villagerData);
+        finishStackedExtraction(player, stack, targetStack);
         clearStoredEntity();
         player.sendSystemMessage(Component.translatable("message.trading_cells.villager_extracted"));
         return InteractionResult.SUCCESS_SERVER;
@@ -200,7 +202,9 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
             return InteractionResult.FAIL;
         }
 
-        PiglinCapturerItem.setCapturedPiglinData(stack, piglinData);
+        ItemStack targetStack = createSingleCapturerTarget(stack);
+        PiglinCapturerItem.setCapturedPiglinData(targetStack, piglinData);
+        finishStackedExtraction(player, stack, targetStack);
         clearStoredEntity();
         player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_extracted"));
         return InteractionResult.SUCCESS_SERVER;
@@ -616,6 +620,25 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
 
     private static void unregisterTradingPlayer(UUID playerId) {
         OPEN_TRADING_CELLS_BY_PLAYER.remove(playerId);
+    }
+
+
+    private static ItemStack createSingleCapturerTarget(ItemStack heldStack) {
+        if (heldStack.getCount() <= 1) {
+            return heldStack;
+        }
+        return new ItemStack(heldStack.getItem());
+    }
+
+    private static void finishStackedExtraction(Player player, ItemStack heldStack, ItemStack targetStack) {
+        if (targetStack == heldStack) {
+            return;
+        }
+
+        heldStack.shrink(1);
+        if (!player.getInventory().add(targetStack)) {
+            player.drop(targetStack, false);
+        }
     }
 
     private void clearStoredEntity() {

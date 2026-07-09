@@ -5,6 +5,9 @@ import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringC
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.block.BlockModelResolver;
+import net.minecraft.client.renderer.block.model.BlockDisplayContext;
+import net.minecraft.client.renderer.block.BlockModelRenderState;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
@@ -16,6 +19,7 @@ import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
@@ -34,10 +38,12 @@ public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntity
     private static final double OUTPUT_ITEM_BASE_Y = 0.34D;
 
     private final EntityRenderDispatcher entityRenderer;
+    private final BlockModelResolver blockModelResolver;
     private final ItemModelResolver itemModelResolver;
 
     public PiglinBarteringCellBlockEntityRenderer(BlockEntityRendererProvider.Context context) {
         this.entityRenderer = context.entityRenderer();
+        this.blockModelResolver = context.blockModelResolver();
         this.itemModelResolver = context.itemModelResolver();
     }
 
@@ -55,20 +61,30 @@ public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntity
             ModelFeatureRenderer.@Nullable CrumblingOverlay breakProgress
     ) {
         BlockEntityRenderer.super.extractRenderState(blockEntity, state, partialTicks, cameraPosition, breakProgress);
+        if (blockEntity.getLevel() != null) {
+            state.lightCoords = PreviewEntityRenderUtil.sampleCageLightCoords(blockEntity.getLevel(), blockEntity.getBlockPos());
+        }
+        state.cellState.clear();
+        blockModelResolver.update(state.cellState, blockEntity.getBlockState(), BlockDisplayContext.create());
+        state.cellState.tintLayers().clear();
         state.displayPiglin = null;
         state.outputItem.clear();
         state.scale = ADULT_DISPLAY_SCALE;
         state.facing = blockEntity.getBlockState().getValue(PiglinBarteringCellBlock.FACING);
 
-        Piglin piglin = blockEntity.createPiglinForDisplay();
-        if (piglin != null) {
-            orientForCellPreview(piglin, state.facing.toYRot());
-            PreviewEntityRenderUtil.preparePreviewEntity(piglin);
-            state.displayPiglin = entityRenderer.extractEntity(piglin, partialTicks);
-            state.displayPiglin.lightCoords = state.lightCoords;
-            state.displayPiglin.shadowRadius = 0.0F;
-            state.displayPiglin.shadowPieces.clear();
-            state.scale = piglin.isBaby() ? BABY_DISPLAY_SCALE : ADULT_DISPLAY_SCALE;
+        CompoundTag piglinData = blockEntity.copyPiglinData();
+        if (piglinData == null) {
+            state.clearCachedPiglin();
+        } else {
+            Piglin piglin = state.getOrCreatePiglin(blockEntity, piglinData, blockEntity.isBartering());
+            if (piglin != null) {
+                orientForCellPreview(piglin, state.facing.toYRot());
+                PreviewEntityRenderUtil.preparePreviewEntity(piglin);
+                state.displayPiglin = entityRenderer.extractEntity(piglin, partialTicks);
+                state.displayPiglin.lightCoords = state.lightCoords;
+                PreviewEntityRenderUtil.suppressPreviewShadows(state.displayPiglin);
+                state.scale = piglin.isBaby() ? BABY_DISPLAY_SCALE : ADULT_DISPLAY_SCALE;
+            }
         }
 
         ItemStack outputStack = blockEntity.copyOutputStack();
@@ -88,6 +104,12 @@ public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntity
     public void submit(State state, @NonNull PoseStack poseStack, @NonNull SubmitNodeCollector submitNodeCollector, @NonNull CameraRenderState camera) {
         double stepX = state.facing.getStepX();
         double stepZ = state.facing.getStepZ();
+
+        if (!state.cellState.isEmpty()) {
+            poseStack.pushPose();
+            state.cellState.submit(poseStack, submitNodeCollector, state.lightCoords, OverlayTexture.NO_OVERLAY, EntityRenderState.NO_OUTLINE);
+            poseStack.popPose();
+        }
 
         if (state.displayPiglin != null) {
             poseStack.pushPose();
@@ -125,9 +147,28 @@ public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntity
     }
 
     public static final class State extends BlockEntityRenderState {
+        public final BlockModelRenderState cellState = new BlockModelRenderState();
         public @Nullable EntityRenderState displayPiglin;
         public final ItemStackRenderState outputItem = new ItemStackRenderState();
         public float scale = ADULT_DISPLAY_SCALE;
         public Direction facing = Direction.NORTH;
+        private @Nullable CompoundTag cachedPiglinData;
+        private @Nullable Piglin cachedPiglin;
+        private boolean cachedBartering;
+
+        private @Nullable Piglin getOrCreatePiglin(PiglinBarteringCellBlockEntity blockEntity, CompoundTag piglinData, boolean bartering) {
+            if (cachedPiglin == null || cachedPiglinData == null || !cachedPiglinData.equals(piglinData) || cachedBartering != bartering) {
+                cachedPiglin = blockEntity.createPiglinForDisplay();
+                cachedPiglinData = piglinData.copy();
+                cachedBartering = bartering;
+            }
+            return cachedPiglin;
+        }
+
+        private void clearCachedPiglin() {
+            cachedPiglin = null;
+            cachedPiglinData = null;
+            cachedBartering = false;
+        }
     }
 }

@@ -79,13 +79,13 @@ public final class VillagerCapturerItemRenderSupport {
                         0.0F, 0.0F, 0.0F));
 
         ADULT_TRANSFORMS.put(SpecialProfile.GUI,
-                new Transform(0.4F,
-                        1.20D, 0.2D, 0.0D,
+                new Transform(0.38F,
+                        1.10D, 0.18D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         BABY_TRANSFORMS.put(SpecialProfile.GUI,
-                new Transform(0.52F,
-                        0.95D, 0.28D, 0.0D,
+                new Transform(0.48F,
+                        0.95D, 0.23D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         ADULT_TRANSFORMS.put(SpecialProfile.FIXED,
@@ -428,6 +428,7 @@ public final class VillagerCapturerItemRenderSupport {
             PreviewEntityRenderUtil.preparePreviewEntity(villager);
             EntityRenderState state = dispatcher.extractEntity(villager, partialTick);
             state.lightCoords = profile == SpecialProfile.GUI ? 15728880 : packedLight;
+            PreviewEntityRenderUtil.suppressPreviewShadows(state);
             dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
             return true;
         }

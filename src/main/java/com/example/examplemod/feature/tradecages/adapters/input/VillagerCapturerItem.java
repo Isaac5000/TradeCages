@@ -104,6 +104,11 @@ public class VillagerCapturerItem extends Item {
     }
 
     @Override
+    public int getMaxStackSize(@NonNull ItemStack stack) {
+        return hasCapturedVillager(stack) ? 1 : getDefaultMaxStackSize();
+    }
+
+    @Override
     public boolean isFoil(@NonNull ItemStack stack) {
         return hasCapturedVillager(stack) || super.isFoil(stack);
     }

@@ -1,9 +1,14 @@
 package com.example.examplemod.feature.tradecages.adapters.input;
 
+import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.stats.Stats;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -14,6 +19,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -47,6 +53,21 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
         builder.add(FACING);
     }
 
+    public int getLightBlock(BlockState state, BlockGetter world, BlockPos pos) {
+        // Allow light to pass through so interior can be lit by nearby light sources
+        return 0;
+    }
+
+    public boolean propagatesSkylightDown(BlockState state, BlockGetter reader, BlockPos pos) {
+        // Ensure skylight and block light propagate through the model
+        return true;
+    }
+
+    public float getShadeBrightness(BlockState state, BlockGetter world, BlockPos pos) {
+        return 1.0F;
+    }
+
+
     @Override
     public @Nullable BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
         return new VillagerTradingCellBlockEntity(pos, state);
@@ -54,7 +75,7 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
 
     @Override
     protected @NonNull RenderShape getRenderShape(@NonNull BlockState state) {
-        return RenderShape.MODEL;
+        return RenderShape.INVISIBLE;
     }
 
     @Override
@@ -92,14 +113,18 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS_SERVER;
         }
 
-        if (!player.isShiftKeyDown() && stack.getItem() instanceof BlockItem) {
+        if (player.isShiftKeyDown()) {
+            return cell.extractPoiToPlayer(player);
+        }
+
+        if (stack.getItem() instanceof BlockItem) {
             InteractionResult result = cell.insertPoiFromStack(stack, player);
             if (result != InteractionResult.PASS) {
                 return result;
             }
         }
 
-        return stack.isEmpty() ? InteractionResult.TRY_WITH_EMPTY_HAND : InteractionResult.PASS;
+        return cell.openTrade(player);
     }
 
     @Override
@@ -135,11 +160,17 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
             @Nullable BlockEntity blockEntity,
             @NonNull ItemStack tool
     ) {
-        if (!level.isClientSide() && blockEntity instanceof VillagerTradingCellBlockEntity cell) {
-            cell.dropStoredContents(level, pos);
-        }
+        player.awardStat(Stats.BLOCK_MINED.get(this));
+        player.causeFoodExhaustion(0.005F);
 
-        super.playerDestroy(level, player, pos, state, blockEntity, tool);
+        if (!level.isClientSide() && !player.isCreative() && blockEntity instanceof VillagerTradingCellBlockEntity cell) {
+            ItemStack drop = new ItemStack(TradingCellsRegistrationAdapter.TRADE_CAGE_ITEM.get());
+            CompoundTag data = cell.saveCustomOnly(level.registryAccess());
+            if (!data.isEmpty()) {
+                drop.set(DataComponents.BLOCK_ENTITY_DATA, TypedEntityData.of(cell.getType(), data));
+            }
+            Block.popResource(level, pos, drop);
+        }
     }
 
     private static @Nullable VillagerTradingCellBlockEntity getCell(Level level, BlockPos pos) {

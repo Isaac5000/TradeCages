@@ -16,6 +16,7 @@ import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.piglin.Piglin;
@@ -59,6 +60,12 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
             ModelFeatureRenderer.@Nullable CrumblingOverlay breakProgress
     ) {
         BlockEntityRenderer.super.extractRenderState(blockEntity, state, partialTicks, cameraPosition, breakProgress);
+        if (blockEntity.getLevel() != null) {
+            state.lightCoords = PreviewEntityRenderUtil.sampleCageLightCoords(blockEntity.getLevel(), blockEntity.getBlockPos());
+        }
+        state.cellState.clear();
+        blockModelResolver.update(state.cellState, blockEntity.getBlockState(), BlockDisplayContext.create());
+        state.cellState.tintLayers().clear();
         state.displayEntity = null;
         state.scale = ADULT_DISPLAY_SCALE;
         state.facing = blockEntity.getBlockState().getValue(VillagerTradingCellBlock.FACING);
@@ -71,7 +78,14 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
             state.poiState.tintLayers().clear();
         }
 
-        Entity entity = blockEntity.createStoredEntityForDisplay();
+        CompoundTag entityData = blockEntity.copyStoredEntityData();
+        String entityKindId = blockEntity.getStoredEntityKindId();
+        if (entityData == null || entityKindId == null) {
+            state.clearCachedEntity();
+            return;
+        }
+
+        Entity entity = state.getOrCreateEntity(blockEntity, entityData, entityKindId);
         if (entity == null) {
             return;
         }
@@ -80,8 +94,7 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
         PreviewEntityRenderUtil.preparePreviewEntity(entity);
         state.displayEntity = entityRenderer.extractEntity(entity, partialTicks);
         state.displayEntity.lightCoords = state.lightCoords;
-        state.displayEntity.shadowRadius = 0.0F;
-        state.displayEntity.shadowPieces.clear();
+        PreviewEntityRenderUtil.suppressPreviewShadows(state.displayEntity);
         state.scale = isBaby(entity) ? BABY_DISPLAY_SCALE : ADULT_DISPLAY_SCALE;
     }
 
@@ -89,6 +102,12 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
     public void submit(State state, @NonNull PoseStack poseStack, @NonNull SubmitNodeCollector submitNodeCollector, @NonNull CameraRenderState camera) {
         double stepX = state.facing.getStepX();
         double stepZ = state.facing.getStepZ();
+
+        if (!state.cellState.isEmpty()) {
+            poseStack.pushPose();
+            state.cellState.submit(poseStack, submitNodeCollector, state.lightCoords, OverlayTexture.NO_OVERLAY, EntityRenderState.NO_OUTLINE);
+            poseStack.popPose();
+        }
 
         if (state.displayEntity != null) {
             poseStack.pushPose();
@@ -149,9 +168,32 @@ public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer
     }
 
     public static final class State extends BlockEntityRenderState {
+        public final BlockModelRenderState cellState = new BlockModelRenderState();
         public @Nullable EntityRenderState displayEntity;
         public float scale = ADULT_DISPLAY_SCALE;
         public Direction facing = Direction.NORTH;
         public final BlockModelRenderState poiState = new BlockModelRenderState();
+        private @Nullable CompoundTag cachedEntityData;
+        private @Nullable String cachedEntityKindId;
+        private @Nullable Entity cachedEntity;
+
+        private @Nullable Entity getOrCreateEntity(VillagerTradingCellBlockEntity blockEntity, CompoundTag entityData, String entityKindId) {
+            if (cachedEntity == null
+                    || cachedEntityData == null
+                    || cachedEntityKindId == null
+                    || !cachedEntityData.equals(entityData)
+                    || !cachedEntityKindId.equals(entityKindId)) {
+                cachedEntity = blockEntity.createStoredEntityForDisplay();
+                cachedEntityData = entityData.copy();
+                cachedEntityKindId = entityKindId;
+            }
+            return cachedEntity;
+        }
+
+        private void clearCachedEntity() {
+            cachedEntity = null;
+            cachedEntityData = null;
+            cachedEntityKindId = null;
+        }
     }
 }

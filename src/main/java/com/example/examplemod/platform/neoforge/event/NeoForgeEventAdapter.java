@@ -9,6 +9,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -58,11 +59,13 @@ public final class NeoForgeEventAdapter {
             return;
         }
 
-        if (!VillagerCapturerItem.captureVillager(heldItem, villager)) {
+        ItemStack captureTarget = createSingleCapturerTarget(heldItem);
+        if (!VillagerCapturerItem.captureVillager(captureTarget, villager)) {
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
 
+        finishStackedCapture(event.getEntity(), heldItem, captureTarget);
         villager.discard();
         event.getEntity().sendSystemMessage(Component.translatable("message.trading_cells.villager_captured"));
     }
@@ -92,12 +95,31 @@ public final class NeoForgeEventAdapter {
             return;
         }
 
-        if (!PiglinCapturerItem.capturePiglin(heldItem, piglin)) {
+        ItemStack captureTarget = createSingleCapturerTarget(heldItem);
+        if (!PiglinCapturerItem.capturePiglin(captureTarget, piglin)) {
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
 
+        finishStackedCapture(event.getEntity(), heldItem, captureTarget);
         piglin.discard();
         event.getEntity().sendSystemMessage(Component.translatable("message.trading_cells.piglin_captured"));
+    }
+    private static ItemStack createSingleCapturerTarget(ItemStack heldItem) {
+        if (heldItem.getCount() <= 1) {
+            return heldItem;
+        }
+        return new ItemStack(heldItem.getItem());
+    }
+
+    private static void finishStackedCapture(Player player, ItemStack heldItem, ItemStack captureTarget) {
+        if (captureTarget == heldItem) {
+            return;
+        }
+
+        heldItem.shrink(1);
+        if (!player.getInventory().add(captureTarget)) {
+            player.drop(captureTarget, false);
+        }
     }
 }

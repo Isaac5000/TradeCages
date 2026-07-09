@@ -67,8 +67,8 @@ public final class PiglinCapturerItemRenderSupport {
                         0.0F, 0.0F, 0.0F));
 
         ADULT_TRANSFORMS.put(SpecialProfile.GUI,
-                new Transform(0.4F,
-                        1.20D, 0.2D, 0.0D,
+                new Transform(0.38F,
+                        1.10D, 0.18D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         BABY_TRANSFORMS.put(SpecialProfile.GUI,
@@ -326,6 +326,7 @@ public final class PiglinCapturerItemRenderSupport {
             PreviewEntityRenderUtil.preparePreviewEntity(piglin);
             EntityRenderState state = dispatcher.extractEntity(piglin, partialTick);
             state.lightCoords = profile == SpecialProfile.GUI ? 15728880 : packedLight;
+            PreviewEntityRenderUtil.suppressPreviewShadows(state);
             dispatcher.submit(state, cameraState, 0.0D, 0.0D, 0.0D, poseStack, submitNodeCollector);
             return true;
         }

@@ -1,5 +1,6 @@
 package com.example.examplemod.platform.neoforge.bootstrap;
 
+import com.example.examplemod.feature.breeders.adapters.output.client.BreederClientRegistrationAdapter;
 import com.example.examplemod.platform.neoforge.event.CapturerClientEvent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
@@ -19,6 +20,7 @@ public class TradingCellsClient {
         if (modBus != null) {
             modBus.addListener(CapturerClientEvent::onRegisterSpecialModelRenderer);
             modBus.addListener(CapturerClientEvent::onRegisterBlockEntityRenderers);
+            modBus.addListener(BreederClientRegistrationAdapter::onRegisterMenuScreens);
         }
         // RenderHand handling removed — rendering is handled by SpecialModelRenderers selected by JSON.
     }

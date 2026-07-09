@@ -1,6 +1,18 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "trading_cells:item/piglin_bartering_cell"
+    "type": "minecraft:condition",
+    "property": "minecraft:has_component",
+    "component": "minecraft:block_entity_data",
+    "on_true": {
+      "type": "minecraft:special",
+      "base": "trading_cells:item/piglin_bartering_cell",
+      "model": {
+        "type": "trading_cells:block_item_contents"
+      }
+    },
+    "on_false": {
+      "type": "minecraft:model",
+      "model": "trading_cells:item/piglin_bartering_cell"
+    }
   }
 }

@@ -2,10 +2,12 @@ package com.example.examplemod.feature.tradecages.adapters.output;
 
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlock;
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlockEntity;
+import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlockItem;
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinCapturerItem;
 import com.example.examplemod.feature.tradecages.adapters.input.VillagerCapturerItem;
 import com.example.examplemod.feature.tradecages.adapters.input.VillagerTradingCellBlock;
 import com.example.examplemod.feature.tradecages.adapters.input.VillagerTradingCellBlockEntity;
+import com.example.examplemod.feature.tradecages.adapters.input.VillagerTradingCellBlockItem;
 import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
 import com.example.examplemod.platform.neoforge.registration.Registration;
 import net.minecraft.core.registries.Registries;
@@ -29,7 +31,10 @@ public class TradingCellsRegistrationAdapter {
             Registration.BLOCKS.register(TRADE_CAGE_ID, () ->
                     new VillagerTradingCellBlock(BlockBehaviour.Properties.of().setId(
                             ResourceKey.create(Registries.BLOCK, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, TRADE_CAGE_ID))
-                    ).strength(3.5F).requiresCorrectToolForDrops().noOcclusion())
+                    ).strength(2.0F, 6.0F).noOcclusion()
+                            .isRedstoneConductor((state, getter, pos) -> false)
+                            .isSuffocating((state, getter, pos) -> false)
+                            .isViewBlocking((state, getter, pos) -> false))
             );
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<VillagerTradingCellBlockEntity>> VILLAGER_TRADING_CELL_BLOCK_ENTITY =
@@ -41,7 +46,10 @@ public class TradingCellsRegistrationAdapter {
             Registration.BLOCKS.register(PIGLIN_BARTERING_CELL_ID, () ->
                     new PiglinBarteringCellBlock(BlockBehaviour.Properties.of().setId(
                             ResourceKey.create(Registries.BLOCK, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, PIGLIN_BARTERING_CELL_ID))
-                    ).strength(3.5F).requiresCorrectToolForDrops().noOcclusion())
+                    ).strength(2.0F, 6.0F).noOcclusion()
+                            .isRedstoneConductor((state, getter, pos) -> false)
+                            .isSuffocating((state, getter, pos) -> false)
+                            .isViewBlocking((state, getter, pos) -> false))
             );
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PiglinBarteringCellBlockEntity>> PIGLIN_BARTERING_CELL_BLOCK_ENTITY =
@@ -49,24 +57,32 @@ public class TradingCellsRegistrationAdapter {
                     new BlockEntityType<>(PiglinBarteringCellBlockEntity::new, PIGLIN_BARTERING_CELL_BLOCK.get())
             );
 
-    public static final DeferredItem<net.minecraft.world.item.BlockItem> TRADE_CAGE_ITEM =
-            Registration.ITEMS.registerSimpleBlockItem(TRADE_CAGE_ID, TRADE_CAGE_BLOCK);
+    public static final DeferredItem<VillagerTradingCellBlockItem> TRADE_CAGE_ITEM =
+            Registration.ITEMS.register(TRADE_CAGE_ID, () -> new VillagerTradingCellBlockItem(
+                    TRADE_CAGE_BLOCK.get(),
+                    new Item.Properties()
+                            .setId(ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, TRADE_CAGE_ID)))
+            ));
 
-    public static final DeferredItem<net.minecraft.world.item.BlockItem> PIGLIN_BARTERING_CELL_ITEM =
-            Registration.ITEMS.registerSimpleBlockItem(PIGLIN_BARTERING_CELL_ID, PIGLIN_BARTERING_CELL_BLOCK);
+    public static final DeferredItem<PiglinBarteringCellBlockItem> PIGLIN_BARTERING_CELL_ITEM =
+            Registration.ITEMS.register(PIGLIN_BARTERING_CELL_ID, () -> new PiglinBarteringCellBlockItem(
+                    PIGLIN_BARTERING_CELL_BLOCK.get(),
+                    new Item.Properties()
+                            .setId(ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, PIGLIN_BARTERING_CELL_ID)))
+            ));
 
     public static final DeferredItem<VillagerCapturerItem> VILLAGER_CAPTURER_ITEM =
             Registration.ITEMS.register("villager_capturer", () -> new VillagerCapturerItem(
                     new Item.Properties()
                             .setId(ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, "villager_capturer")))
-                            .stacksTo(1)
+                            .stacksTo(64)
             ));
 
     public static final DeferredItem<PiglinCapturerItem> PIGLIN_CAPTURER_ITEM =
             Registration.ITEMS.register("piglin_capturer", () -> new PiglinCapturerItem(
                     new Item.Properties()
                             .setId(ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(TradingCells.MOD_ID, "piglin_capturer")))
-                            .stacksTo(1)
+                            .stacksTo(64)
             ));
 
     @SuppressWarnings("unused")

@@ -1,5 +1,8 @@
 package com.example.examplemod.platform.neoforge.event;
 
+import com.example.examplemod.feature.breeders.adapters.output.BreederRegistrationAdapter;
+import com.example.examplemod.feature.breeders.adapters.output.client.BreederBlockEntityRenderer;
+import com.example.examplemod.feature.breeders.adapters.output.client.BlockItemContentRenderSupport;
 import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsRegistrationAdapter;
 import com.example.examplemod.feature.tradecages.adapters.output.client.PiglinBarteringCellBlockEntityRenderer;
 import com.example.examplemod.feature.tradecages.adapters.output.client.PiglinCapturerItemRenderSupport;
@@ -30,6 +33,7 @@ public final class CapturerClientEvent {
         register(event, "piglin_capturer_on_shelf", PiglinCapturerItemRenderSupport.OnShelf.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_third_person", PiglinCapturerItemRenderSupport.ThirdPerson.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_first_person", PiglinCapturerItemRenderSupport.FirstPerson.Unbaked.MAP_CODEC);
+        register(event, "block_item_contents", BlockItemContentRenderSupport.Unbaked.MAP_CODEC);
     }
 
     public static void onRegisterBlockEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {
@@ -40,6 +44,14 @@ public final class CapturerClientEvent {
         event.registerBlockEntityRenderer(
                 TradingCellsRegistrationAdapter.PIGLIN_BARTERING_CELL_BLOCK_ENTITY.get(),
                 PiglinBarteringCellBlockEntityRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                BreederRegistrationAdapter.VILLAGER_BREEDER_BLOCK_ENTITY.get(),
+                BreederBlockEntityRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                BreederRegistrationAdapter.PIGLIN_BREEDER_BLOCK_ENTITY.get(),
+                BreederBlockEntityRenderer::new
         );
     }
 

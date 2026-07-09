@@ -21,7 +21,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -57,6 +56,10 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, PiglinBarteringCellBlockEntity cell) {
+        if (!cell.needsServerTick()) {
+            return;
+        }
+
         if (level instanceof ServerLevel serverLevel) {
             cell.tickBarter(serverLevel);
         }
@@ -72,6 +75,16 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
 
     public boolean isBartering() {
         return barterTicksRemaining > 0;
+    }
+
+    private boolean needsServerTick() {
+        return isBartering()
+                || (!goldBuffer.isEmpty()
+                && goldBuffer.is(Items.GOLD_INGOT)
+                && outputBuffer.isEmpty()
+                && hasPiglin()
+                && storedPiglinData != null
+                && !PiglinCapturerItem.isBabyPiglin(storedPiglinData));
     }
 
     public @NonNull ItemStack copyOutputStack() {
@@ -128,7 +141,9 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
             return InteractionResult.FAIL;
         }
 
-        PiglinCapturerItem.setCapturedPiglinData(stack, piglinData);
+        ItemStack targetStack = createSingleCapturerTarget(stack);
+        PiglinCapturerItem.setCapturedPiglinData(targetStack, piglinData);
+        finishStackedExtraction(player, stack, targetStack);
         clearStoredPiglin();
         player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_extracted"));
         return InteractionResult.SUCCESS_SERVER;
@@ -143,7 +158,7 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
             return InteractionResult.SUCCESS_SERVER;
         }
 
-        BarterResult result = tryStartBarter(serverLevel);
+        BarterResult result = tryStartBarter();
         if (result == BarterResult.SUCCESS) {
             goldStack.shrink(1);
             player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_barter_started"));
@@ -159,17 +174,44 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
             return InteractionResult.PASS;
         }
 
-        ItemStack remaining = outputBuffer.copy();
-        player.getInventory().add(remaining);
-        outputBuffer = remaining.isEmpty() ? ItemStack.EMPTY : remaining;
-        markChangedAndSync();
-
-        if (outputBuffer.isEmpty()) {
-            player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_barter_output_taken"));
-        } else {
+        if (!canPlayerInventoryFitEntireStack(player, outputBuffer)) {
             player.sendSystemMessage(Component.translatable("message.trading_cells.inventory_full"));
+            return InteractionResult.SUCCESS_SERVER;
         }
+
+        ItemStack toInsert = outputBuffer.copy();
+        boolean inserted = player.getInventory().add(toInsert);
+        if (!inserted || !toInsert.isEmpty()) {
+            player.sendSystemMessage(Component.translatable("message.trading_cells.inventory_full"));
+            return InteractionResult.SUCCESS_SERVER;
+        }
+
+        outputBuffer = ItemStack.EMPTY;
+        markChangedAndSync();
+        player.sendSystemMessage(Component.translatable("message.trading_cells.piglin_barter_output_taken"));
         return InteractionResult.SUCCESS_SERVER;
+    }
+
+    private static boolean canPlayerInventoryFitEntireStack(Player player, ItemStack stack) {
+        if (stack.isEmpty()) {
+            return true;
+        }
+
+        int remaining = stack.getCount();
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack inventoryStack = player.getInventory().getItem(i);
+            if (inventoryStack.isEmpty()) {
+                remaining -= Math.min(stack.getMaxStackSize(), stack.getCount());
+            } else if (ItemStack.isSameItemSameComponents(inventoryStack, stack)) {
+                remaining -= Math.max(0, inventoryStack.getMaxStackSize() - inventoryStack.getCount());
+            }
+
+            if (remaining <= 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void tickBarter(ServerLevel serverLevel) {
@@ -178,29 +220,26 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
             if (barterTicksRemaining <= 0) {
                 barterTicksRemaining = 0;
                 finishBarter(serverLevel);
+                markChangedAndSync();
+            } else {
+                setChanged();
             }
-            markChangedAndSync();
             return;
         }
 
-        if (!outputBuffer.isEmpty()) {
-            tryPushOutputBelow(serverLevel);
-            return;
-        }
-
-        if (!goldBuffer.isEmpty() && goldBuffer.is(Items.GOLD_INGOT)) {
-            BarterResult result = tryStartBarter(serverLevel);
+        if (!goldBuffer.isEmpty() && goldBuffer.is(Items.GOLD_INGOT) && outputBuffer.isEmpty()) {
+            BarterResult result = tryStartBarter();
             if (result == BarterResult.SUCCESS) {
                 goldBuffer.shrink(1);
                 if (goldBuffer.isEmpty()) {
                     goldBuffer = ItemStack.EMPTY;
                 }
-                markChangedAndSync();
+                setChanged();
             }
         }
     }
 
-    private BarterResult tryStartBarter(ServerLevel serverLevel) {
+    private BarterResult tryStartBarter() {
         if (isBartering()) {
             return BarterResult.BUSY;
         }
@@ -245,8 +284,6 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
         for (ItemStack result : barteredItems) {
             storeBarterResult(result.copy());
         }
-
-        markChangedAndSync();
     }
 
     private void storeBarterResult(ItemStack stack) {
@@ -267,33 +304,6 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
         }
     }
 
-    private void tryPushOutputBelow(ServerLevel serverLevel) {
-        if (outputBuffer.isEmpty()) {
-            return;
-        }
-
-        ItemStack remainder = tryInsertBelow(serverLevel, outputBuffer.copy());
-        if (remainder.getCount() != outputBuffer.getCount()) {
-            outputBuffer = remainder.isEmpty() ? ItemStack.EMPTY : remainder;
-            markChangedAndSync();
-        }
-    }
-
-    private ItemStack tryInsertBelow(ServerLevel serverLevel, ItemStack stack) {
-        if (stack.isEmpty()) {
-            return ItemStack.EMPTY;
-        }
-
-        BlockPos belowPos = worldPosition.below();
-        Container container = HopperBlockEntity.getContainerAt(serverLevel, belowPos);
-        if (container == null) {
-            return stack;
-        }
-
-        ItemStack remainder = HopperBlockEntity.addItem(null, container, stack, Direction.UP);
-        container.setChanged();
-        return remainder;
-    }
 
     public void dropStoredPiglinCapturer(Level level, BlockPos pos) {
         CompoundTag piglinData = copyPiglinData();
@@ -370,6 +380,25 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
         return saveCustomOnly(registries);
     }
 
+
+    private static ItemStack createSingleCapturerTarget(ItemStack heldStack) {
+        if (heldStack.getCount() <= 1) {
+            return heldStack;
+        }
+        return new ItemStack(heldStack.getItem());
+    }
+
+    private static void finishStackedExtraction(Player player, ItemStack heldStack, ItemStack targetStack) {
+        if (targetStack == heldStack) {
+            return;
+        }
+
+        heldStack.shrink(1);
+        if (!player.getInventory().add(targetStack)) {
+            player.drop(targetStack, false);
+        }
+    }
+
     private void clearStoredPiglin() {
         storedPiglinData = null;
         markChangedAndSync();
@@ -423,7 +452,7 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
             if (outputBuffer.isEmpty()) {
                 outputBuffer = ItemStack.EMPTY;
             }
-            setChanged();
+            markChangedAndSync();
             return removed;
         }
 
@@ -452,7 +481,7 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
         if (slot == GOLD_SLOT) {
             if (stack.isEmpty()) {
                 goldBuffer = ItemStack.EMPTY;
-            } else if (stack.is(Items.GOLD_INGOT) && !isBartering() && outputBuffer.isEmpty() && goldBuffer.isEmpty()) {
+            } else if (canPlaceItem(slot, stack)) {
                 goldBuffer = stack.copy();
                 goldBuffer.setCount(1);
             }
@@ -478,7 +507,14 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
 
     @Override
     public boolean canPlaceItem(int slot, @NonNull ItemStack stack) {
-        return slot == GOLD_SLOT && stack.is(Items.GOLD_INGOT) && !isBartering() && outputBuffer.isEmpty() && goldBuffer.isEmpty();
+        return slot == GOLD_SLOT
+                && stack.is(Items.GOLD_INGOT)
+                && !isBartering()
+                && outputBuffer.isEmpty()
+                && goldBuffer.isEmpty()
+                && hasPiglin()
+                && storedPiglinData != null
+                && !PiglinCapturerItem.isBabyPiglin(storedPiglinData);
     }
 
     @Override

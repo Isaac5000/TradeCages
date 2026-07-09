@@ -109,6 +109,11 @@ public class PiglinCapturerItem extends Item {
     }
 
     @Override
+    public int getMaxStackSize(@NonNull ItemStack stack) {
+        return hasCapturedPiglin(stack) ? 1 : getDefaultMaxStackSize();
+    }
+
+    @Override
     public boolean isFoil(@NonNull ItemStack stack) {
         return hasCapturedPiglin(stack) || super.isFoil(stack);
     }

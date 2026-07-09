@@ -4,6 +4,10 @@ import com.example.examplemod.feature.tradecages.adapters.output.TradingCellsReg
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.stats.Stats;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -15,6 +19,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -50,6 +55,19 @@ public class PiglinBarteringCellBlock extends BaseEntityBlock {
         builder.add(FACING);
     }
 
+    public int getLightBlock(BlockState state, BlockGetter world, BlockPos pos) {
+        return 0; // allow light to pass through
+    }
+
+    public boolean propagatesSkylightDown(BlockState state, BlockGetter reader, BlockPos pos) {
+        return true;
+    }
+
+    public float getShadeBrightness(BlockState state, BlockGetter world, BlockPos pos) {
+        return 1.0F;
+    }
+
+
     @Override
     public @Nullable BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
         return new PiglinBarteringCellBlockEntity(pos, state);
@@ -57,7 +75,7 @@ public class PiglinBarteringCellBlock extends BaseEntityBlock {
 
     @Override
     protected @NonNull RenderShape getRenderShape(@NonNull BlockState state) {
-        return RenderShape.MODEL;
+        return RenderShape.INVISIBLE;
     }
 
     @Override
@@ -147,11 +165,17 @@ public class PiglinBarteringCellBlock extends BaseEntityBlock {
             @Nullable BlockEntity blockEntity,
             @NonNull ItemStack tool
     ) {
-        if (!level.isClientSide() && blockEntity instanceof PiglinBarteringCellBlockEntity cell) {
-            cell.dropStoredPiglinCapturer(level, pos);
-        }
+        player.awardStat(Stats.BLOCK_MINED.get(this));
+        player.causeFoodExhaustion(0.005F);
 
-        super.playerDestroy(level, player, pos, state, blockEntity, tool);
+        if (!level.isClientSide() && !player.isCreative() && blockEntity instanceof PiglinBarteringCellBlockEntity cell) {
+            ItemStack drop = new ItemStack(TradingCellsRegistrationAdapter.PIGLIN_BARTERING_CELL_ITEM.get());
+            CompoundTag data = cell.saveCustomOnly(level.registryAccess());
+            if (!data.isEmpty()) {
+                drop.set(DataComponents.BLOCK_ENTITY_DATA, TypedEntityData.of(cell.getType(), data));
+            }
+            Block.popResource(level, pos, drop);
+        }
     }
 
     private static @Nullable PiglinBarteringCellBlockEntity getCell(Level level, BlockPos pos) {
