@@ -60,6 +60,7 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
     private int breedTicks;
     private int pendingBabies;
     private @Nullable CompoundTag babyTemplate;
+    private @Nullable CompoundTag preparedBlockDropData;
 
     private final ContainerData dataAccess = new ContainerData() {
         @Override
@@ -166,7 +167,7 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
     }
 
     private boolean canGenerateBaby() {
-        return pendingBabies < MAX_PENDING_BABIES
+        return pendingBabies == 0
                 && isValidAdultParent(getItem(PARENT_A_SLOT))
                 && isValidAdultParent(getItem(PARENT_B_SLOT))
                 && hasFoodCost();
@@ -246,6 +247,7 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
         }
         ItemStack preview = new ItemStack(capturerItem());
         setCapturedData(preview, babyData);
+        preview.setCount(Math.min(pendingBabies, preview.getMaxStackSize()));
         return preview;
     }
 
@@ -292,28 +294,38 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
         }
     }
 
-    public void dropContents(Level level, BlockPos pos) {
+
+    public void prepareForBlockDrop(HolderLookup.Provider registries) {
+        preparedBlockDropData = saveCustomOnly(registries);
         for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
-            if (slot == BABY_PREVIEW_SLOT) {
-                continue;
-            }
-            ItemStack stack = items.get(slot);
-            if (!stack.isEmpty()) {
-                Block.popResource(level, pos, stack.copy());
+            if (slot != BABY_PREVIEW_SLOT) {
                 items.set(slot, ItemStack.EMPTY);
             }
         }
-        while (pendingBabies > 0) {
-            CompoundTag babyData = createBabyDataForOutput();
-            if (babyData == null) {
-                break;
-            }
-            ItemStack stack = new ItemStack(capturerItem());
-            setCapturedData(stack, babyData);
-            Block.popResource(level, pos, stack);
-            pendingBabies--;
+        breedTicks = 0;
+        pendingBabies = 0;
+        babyTemplate = null;
+        setChanged();
+    }
+
+    public CompoundTag getPreparedBlockDropData(HolderLookup.Provider registries) {
+        if (preparedBlockDropData != null) {
+            return preparedBlockDropData.copy();
         }
-        markChangedAndSync();
+        return saveCustomOnly(registries);
+    }
+
+    public void discardContentsAfterBlockDrop() {
+        preparedBlockDropData = null;
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            if (slot != BABY_PREVIEW_SLOT) {
+                items.set(slot, ItemStack.EMPTY);
+            }
+        }
+        breedTicks = 0;
+        pendingBabies = 0;
+        babyTemplate = null;
+        setChanged();
     }
 
     @Override
@@ -421,6 +433,7 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
         breedTicks = 0;
         pendingBabies = 0;
         babyTemplate = null;
+        preparedBlockDropData = null;
         markChangedAndSync();
     }
 
@@ -465,6 +478,7 @@ public abstract class BreederBlockEntity extends BlockEntity implements WorldlyC
         breedTicks = Math.max(0, input.getIntOr(BREED_TICKS_TAG, 0));
         pendingBabies = Math.max(0, input.getIntOr(PENDING_BABIES_TAG, 0));
         babyTemplate = input.read(BABY_TEMPLATE_TAG, CompoundTag.CODEC).orElse(null);
+        preparedBlockDropData = null;
         if (babyTemplate != null && babyTemplate.isEmpty()) {
             babyTemplate = null;
         }

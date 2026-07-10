@@ -170,6 +170,7 @@ public class VillagerTradingCellBlock extends BaseEntityBlock {
                 drop.set(DataComponents.BLOCK_ENTITY_DATA, TypedEntityData.of(cell.getType(), data));
             }
             Block.popResource(level, pos, drop);
+            cell.discardContentsAfterBlockDrop();
         }
     }
 

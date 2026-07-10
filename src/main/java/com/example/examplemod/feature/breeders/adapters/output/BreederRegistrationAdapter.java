@@ -10,13 +10,11 @@ import com.example.examplemod.feature.breeders.application.usecase.TickBreederUs
 import com.example.examplemod.platform.neoforge.bootstrap.TradingCells;
 import com.example.examplemod.platform.neoforge.registration.Registration;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -80,17 +78,6 @@ public final class BreederRegistrationAdapter {
 
     public static final DeferredHolder<MenuType<?>, MenuType<BreederMenu>> PIGLIN_BREEDER_MENU =
             Registration.MENU_TYPES.register(PIGLIN_BREEDER_ID, () -> new MenuType<>(BreederMenu::piglin, FeatureFlags.VANILLA_SET));
-
-    @SuppressWarnings("unused")
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> BREEDER_TAB =
-            Registration.CREATIVE_MODE_TABS.register("breeders_tab", () -> CreativeModeTab.builder()
-                    .title(Component.translatable("itemGroup.trading_cells.breeders"))
-                    .icon(() -> VILLAGER_BREEDER_ITEM.get().getDefaultInstance())
-                    .displayItems((parameters, output) -> {
-                        output.accept(VILLAGER_BREEDER_ITEM.get());
-                        output.accept(PIGLIN_BREEDER_ITEM.get());
-                    })
-                    .build());
 
     private BreederRegistrationAdapter() {
     }

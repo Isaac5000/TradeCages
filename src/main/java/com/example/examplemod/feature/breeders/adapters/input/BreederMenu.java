@@ -47,14 +47,14 @@ public final class BreederMenu extends AbstractContainerMenu {
         this.container = container;
         this.data = data;
 
-        addSlot(new FilteredSlot(container, BreederBlockEntity.FOOD_SLOT, 80, 18, this::isValidFood));
-        addSlot(new FilteredSlot(container, BreederBlockEntity.PARENT_A_SLOT, 50, 44, this::isValidAdultParent));
-        addSlot(new FilteredSlot(container, BreederBlockEntity.PARENT_B_SLOT, 110, 44, this::isValidAdultParent));
-        addSlot(new PreviewSlot(container, BreederBlockEntity.BABY_PREVIEW_SLOT, 80, 68));
-        addSlot(new FilteredSlot(container, BreederBlockEntity.EMPTY_CAPTURER_SLOT, 50, 88, this::isEmptyCapturer));
-        addSlot(new OutputSlot(container, BreederBlockEntity.FILLED_CAPTURER_SLOT, 110, 88));
+        addSlot(new FilteredSlot(container, BreederBlockEntity.FOOD_SLOT, 80, 16, this::isValidFood));
+        addSlot(new FilteredSlot(container, BreederBlockEntity.PARENT_A_SLOT, 41, 48, this::isValidAdultParent));
+        addSlot(new FilteredSlot(container, BreederBlockEntity.PARENT_B_SLOT, 116, 48, this::isValidAdultParent));
+        addSlot(new PreviewSlot(container, BreederBlockEntity.BABY_PREVIEW_SLOT, 80, 79));
+        addSlot(new FilteredSlot(container, BreederBlockEntity.EMPTY_CAPTURER_SLOT, 45, 115, this::isEmptyCapturer));
+        addSlot(new OutputSlot(container, BreederBlockEntity.FILLED_CAPTURER_SLOT, 115, 115));
 
-        addStandardInventorySlots(inventory, 8, 108);
+        addStandardInventorySlots(inventory, 8, 140);
         addDataSlots(data);
     }
 
@@ -84,6 +84,10 @@ public final class BreederMenu extends AbstractContainerMenu {
         ItemStack result = ItemStack.EMPTY;
         Slot slot = slots.get(index);
         if (slot == null || !slot.hasItem()) {
+            return ItemStack.EMPTY;
+        }
+
+        if (index == BreederBlockEntity.BABY_PREVIEW_SLOT) {
             return ItemStack.EMPTY;
         }
 

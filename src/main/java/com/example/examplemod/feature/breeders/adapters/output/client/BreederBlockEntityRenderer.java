@@ -23,8 +23,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.piglin.Piglin;
-import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
@@ -42,11 +40,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class BreederBlockEntityRenderer implements BlockEntityRenderer<BreederBlockEntity, BreederBlockEntityRenderer.State> {
     // Adjusted scales so villagers and beds display at natural size inside breeder
     // Scales halved from previous values to avoid oversized preview
-    private static final float ADULT_SCALE = 0.24F;
-    private static final float BABY_SCALE = 0.19F;
+    private static final float ADULT_SCALE = 0.32F;
+    private static final float BABY_SCALE = 0.25F;
     private static final double PARENT_SIDE_OFFSET = 0.23D;
     private static final double PARENT_BACK_OFFSET = 0.05D;
-    private static final double BABY_FRONT_OFFSET = 0.23D;
     private static final double ENTITY_Y = 0.11D;
     private static final double BED_Y = 0.12D;
     private static final double BED_SCALE = 0.26D;
@@ -101,7 +98,7 @@ public final class BreederBlockEntityRenderer implements BlockEntityRenderer<Bre
         }
     }
 
-    private static BlockState createBedState(BreederKind kind, Direction facing, BedPart part) {
+    static BlockState createBedState(BreederKind kind, Direction facing, BedPart part) {
         return (kind == BreederKind.VILLAGER ? Blocks.BED.yellow() : Blocks.BED.red())
                 .defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, facing)
@@ -121,7 +118,6 @@ public final class BreederBlockEntityRenderer implements BlockEntityRenderer<Bre
 
         submitEntity(state.parentA, state.parentAScale, 0.5D - sideX * PARENT_SIDE_OFFSET + backX, ENTITY_Y, 0.5D - sideZ * PARENT_SIDE_OFFSET + backZ, poseStack, submitNodeCollector, camera);
         submitEntity(state.parentB, state.parentBScale, 0.5D + sideX * PARENT_SIDE_OFFSET + backX, ENTITY_Y, 0.5D + sideZ * PARENT_SIDE_OFFSET + backZ, poseStack, submitNodeCollector, camera);
-        submitEntity(state.baby, state.babyScale, 0.5D + state.facing.getStepX() * BABY_FRONT_OFFSET, ENTITY_Y, 0.5D + state.facing.getStepZ() * BABY_FRONT_OFFSET, poseStack, submitNodeCollector, camera);
     }
 
     private static void submitBedPart(BlockModelRenderState bedState, Direction facing, boolean head, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords) {
@@ -229,16 +225,6 @@ public final class BreederBlockEntityRenderer implements BlockEntityRenderer<Bre
     public @NonNull AABB getRenderBoundingBox(BreederBlockEntity blockEntity) {
         var pos = blockEntity.getBlockPos();
         return new AABB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1.0D, pos.getY() + 1.0D, pos.getZ() + 1.0D);
-    }
-
-    private static boolean isBaby(@Nullable Entity entity) {
-        if (entity instanceof Villager villager) {
-            return villager.isBaby();
-        }
-        if (entity instanceof Piglin piglin) {
-            return piglin.isBaby();
-        }
-        return false;
     }
 
     public static final class State extends BlockEntityRenderState {

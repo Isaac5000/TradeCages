@@ -68,12 +68,12 @@ public final class PiglinCapturerItemRenderSupport {
 
         ADULT_TRANSFORMS.put(SpecialProfile.GUI,
                 new Transform(0.38F,
-                        1.10D, 0.18D, 0.0D,
+                        1.50D, 0.18D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         BABY_TRANSFORMS.put(SpecialProfile.GUI,
                 new Transform(0.55F,
-                        0.90D, 0.30D, 0.0D,
+                        0.95D, 0.30D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         ADULT_TRANSFORMS.put(SpecialProfile.FIXED,

@@ -29,7 +29,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public final class PiglinBarteringCellBlockEntityRenderer implements BlockEntityRenderer<PiglinBarteringCellBlockEntity, PiglinBarteringCellBlockEntityRenderer.State> {
-    private static final float ADULT_DISPLAY_SCALE = 0.30F;
+    private static final float ADULT_DISPLAY_SCALE = 0.40F;
     private static final float BABY_DISPLAY_SCALE = ADULT_DISPLAY_SCALE;
     private static final double ENTITY_BACK_OFFSET = 0.12D;
     private static final double ENTITY_BASE_Y = 0.10D;

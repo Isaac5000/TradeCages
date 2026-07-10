@@ -80,7 +80,7 @@ public final class VillagerCapturerItemRenderSupport {
 
         ADULT_TRANSFORMS.put(SpecialProfile.GUI,
                 new Transform(0.38F,
-                        1.10D, 0.18D, 0.0D,
+                        1.50D, 0.18D, 0.0D,
                         0.0F, 0.0F, 0.0F));
 
         BABY_TRANSFORMS.put(SpecialProfile.GUI,

@@ -31,9 +31,9 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public final class TradingCellBlockEntityRenderer implements BlockEntityRenderer<VillagerTradingCellBlockEntity, TradingCellBlockEntityRenderer.State> {
-    private static final float ADULT_DISPLAY_SCALE = 0.28F;
+    private static final float ADULT_DISPLAY_SCALE = 0.37333334F;
     private static final float BABY_DISPLAY_SCALE = ADULT_DISPLAY_SCALE;
-    private static final float POI_BLOCK_SCALE = 0.22F;
+    private static final float POI_BLOCK_SCALE = 0.29333335F;
     private static final double ENTITY_BACK_OFFSET = 0.18D;
     private static final double POI_FRONT_OFFSET = 0.12D;
     private static final double POI_BASE_Y = 0.14D;

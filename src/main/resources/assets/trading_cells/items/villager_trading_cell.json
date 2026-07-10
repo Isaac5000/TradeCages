@@ -4,10 +4,60 @@
     "property": "minecraft:has_component",
     "component": "minecraft:block_entity_data",
     "on_true": {
-      "type": "minecraft:special",
-      "base": "trading_cells:item/villager_trading_cell",
-      "model": {
-        "type": "trading_cells:block_item_contents"
+      "type": "minecraft:select",
+      "property": "minecraft:display_context",
+      "cases": [
+        {
+          "when": [
+            "gui"
+          ],
+          "model": {
+            "type": "minecraft:composite",
+            "models": [
+              {
+                "type": "minecraft:model",
+                "model": "trading_cells:item/villager_trading_cell"
+              },
+              {
+                "type": "minecraft:special",
+                "base": "trading_cells:item/captured_entity_only_base",
+                "model": {
+                  "type": "trading_cells:block_item_contents_gui"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "when": [
+            "fixed",
+            "on_shelf",
+            "firstperson_lefthand",
+            "firstperson_righthand",
+            "thirdperson_lefthand",
+            "thirdperson_righthand"
+          ],
+          "model": {
+            "type": "minecraft:composite",
+            "models": [
+              {
+                "type": "minecraft:model",
+                "model": "trading_cells:item/villager_trading_cell"
+              },
+              {
+                "type": "minecraft:special",
+                "base": "trading_cells:item/captured_entity_only_base",
+                "model": {
+                  "type": "trading_cells:block_item_contents"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:model",
+        "model": "trading_cells:item/villager_trading_cell"
       }
     },
     "on_false": {

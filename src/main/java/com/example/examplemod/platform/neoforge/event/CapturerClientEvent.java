@@ -33,7 +33,8 @@ public final class CapturerClientEvent {
         register(event, "piglin_capturer_on_shelf", PiglinCapturerItemRenderSupport.OnShelf.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_third_person", PiglinCapturerItemRenderSupport.ThirdPerson.Unbaked.MAP_CODEC);
         register(event, "piglin_capturer_first_person", PiglinCapturerItemRenderSupport.FirstPerson.Unbaked.MAP_CODEC);
-        register(event, "block_item_contents", BlockItemContentRenderSupport.Unbaked.MAP_CODEC);
+        register(event, "block_item_contents", BlockItemContentRenderSupport.DefaultUnbaked.MAP_CODEC);
+        register(event, "block_item_contents_gui", BlockItemContentRenderSupport.GuiUnbaked.MAP_CODEC);
     }
 
     public static void onRegisterBlockEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {

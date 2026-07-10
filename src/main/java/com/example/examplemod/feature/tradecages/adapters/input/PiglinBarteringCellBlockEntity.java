@@ -305,32 +305,12 @@ public class PiglinBarteringCellBlockEntity extends BlockEntity implements World
     }
 
 
-    public void dropStoredPiglinCapturer(Level level, BlockPos pos) {
-        CompoundTag piglinData = copyPiglinData();
-        if (piglinData != null) {
-            ItemStack drop = new ItemStack(TradingCellsRegistrationAdapter.PIGLIN_CAPTURER_ITEM.get());
-            PiglinCapturerItem.setCapturedPiglinData(drop, piglinData);
-            Block.popResource(level, pos, drop);
-            clearStoredPiglin();
-        }
-
-        if (!goldBuffer.isEmpty()) {
-            Block.popResource(level, pos, goldBuffer.copy());
-            goldBuffer = ItemStack.EMPTY;
-            setChanged();
-        }
-
-        if (isBartering()) {
-            Block.popResource(level, pos, new ItemStack(Items.GOLD_INGOT));
-            barterTicksRemaining = 0;
-            setChanged();
-        }
-
-        if (!outputBuffer.isEmpty()) {
-            Block.popResource(level, pos, outputBuffer.copy());
-            outputBuffer = ItemStack.EMPTY;
-            setChanged();
-        }
+    public void discardContentsAfterBlockDrop() {
+        storedPiglinData = null;
+        goldBuffer = ItemStack.EMPTY;
+        outputBuffer = ItemStack.EMPTY;
+        barterTicksRemaining = 0;
+        setChanged();
     }
 
     @Override

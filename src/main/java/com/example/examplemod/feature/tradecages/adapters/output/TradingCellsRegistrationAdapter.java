@@ -1,5 +1,7 @@
 package com.example.examplemod.feature.tradecages.adapters.output;
 
+import com.example.examplemod.feature.breeders.adapters.output.BreederRegistrationAdapter;
+
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlock;
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlockEntity;
 import com.example.examplemod.feature.tradecages.adapters.input.PiglinBarteringCellBlockItem;
@@ -93,6 +95,8 @@ public class TradingCellsRegistrationAdapter {
                     .displayItems((parameters, output) -> {
                         output.accept(TRADE_CAGE_ITEM.get());
                         output.accept(PIGLIN_BARTERING_CELL_ITEM.get());
+                        output.accept(BreederRegistrationAdapter.VILLAGER_BREEDER_ITEM.get());
+                        output.accept(BreederRegistrationAdapter.PIGLIN_BREEDER_ITEM.get());
                         output.accept(VILLAGER_CAPTURER_ITEM.get());
                         output.accept(PIGLIN_CAPTURER_ITEM.get());
                     })

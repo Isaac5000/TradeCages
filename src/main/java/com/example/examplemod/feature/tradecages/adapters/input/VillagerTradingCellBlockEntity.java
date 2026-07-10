@@ -375,41 +375,12 @@ public class VillagerTradingCellBlockEntity extends BlockEntity {
         return InteractionResult.SUCCESS_SERVER;
     }
 
-    public void dropStoredContents(Level level, BlockPos pos) {
-        dropStoredEntityCapturer(level, pos);
-        if (hasStoredPoi()) {
-            Block.popResource(level, pos, storedPoiStack.copy());
-            storedPoiStack = ItemStack.EMPTY;
-            markChangedAndSync();
-        }
-    }
-
-    public void dropStoredEntityCapturer(Level level, BlockPos pos) {
-        if (!hasStoredEntity() || storedEntityKind == null) {
-            return;
-        }
-
-        saveProxyToStoredData();
-        CompoundTag entityData = copyStoredEntityData();
-        if (entityData == null) {
-            return;
-        }
-
-        ItemStack drop = switch (storedEntityKind) {
-            case VILLAGER -> {
-                ItemStack stack = new ItemStack(TradingCellsRegistrationAdapter.VILLAGER_CAPTURER_ITEM.get());
-                VillagerCapturerItem.setCapturedVillagerData(stack, entityData);
-                yield stack;
-            }
-            case PIGLIN -> {
-                ItemStack stack = new ItemStack(TradingCellsRegistrationAdapter.PIGLIN_CAPTURER_ITEM.get());
-                PiglinCapturerItem.setCapturedPiglinData(stack, entityData);
-                yield stack;
-            }
-        };
-
-        Block.popResource(level, pos, drop);
-        clearStoredEntity();
+    public void discardContentsAfterBlockDrop() {
+        storedEntityKind = null;
+        storedEntityData = null;
+        storedPoiStack = ItemStack.EMPTY;
+        merchantVillager = null;
+        setChanged();
     }
 
     @Override

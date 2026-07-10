@@ -112,6 +112,23 @@ public abstract class BreederBlock extends BaseEntityBlock {
                 BreederBlockEntity.serverTick(tickerLevel, tickerPos, tickerState, (BreederBlockEntity) tickerBlockEntity);
     }
 
+
+    @Override
+    public @NonNull BlockState playerWillDestroy(
+            @NonNull Level level,
+            @NonNull BlockPos pos,
+            @NonNull BlockState state,
+            @NonNull Player player
+    ) {
+        if (!level.isClientSide() && !player.isCreative()) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity instanceof BreederBlockEntity breeder) {
+                breeder.prepareForBlockDrop(level.registryAccess());
+            }
+        }
+        return super.playerWillDestroy(level, pos, state, player);
+    }
+
     @Override
     public void playerDestroy(
             @NonNull Level level,
@@ -125,13 +142,12 @@ public abstract class BreederBlock extends BaseEntityBlock {
         player.causeFoodExhaustion(0.005F);
         if (!level.isClientSide() && !player.isCreative() && blockEntity instanceof BreederBlockEntity breeder) {
             ItemStack drop = new ItemStack(this.asItem());
-            CompoundTag data = breeder.saveCustomOnly(level.registryAccess());
+            CompoundTag data = breeder.getPreparedBlockDropData(level.registryAccess());
             if (!data.isEmpty()) {
                 drop.set(DataComponents.BLOCK_ENTITY_DATA, TypedEntityData.of(breeder.getType(), data));
             }
             Block.popResource(level, pos, drop);
-            // clear the block entity inventory so the contents aren't also spilled by onRemove/cleanup
-            breeder.clearContent();
+            breeder.discardContentsAfterBlockDrop();
         }
     }
 
