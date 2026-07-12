@@ -1,0 +1,42 @@
+package com.cosmocraft.trading_cells.platform.neoforge.bootstrap;
+
+import com.cosmocraft.trading_cells.feature.autotrader.adapters.output.client.AutotraderClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.breeders.adapters.output.client.BreederClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.converter.adapters.output.client.ConverterClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.farmer.adapters.output.client.FarmerClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.incubators.adapters.output.client.IncubatorClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.ironfarm.adapters.output.client.IronFarmClientRegistrationAdapter;
+import com.cosmocraft.trading_cells.platform.neoforge.event.CapturerClientEvent;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.gui.ConfigurationScreen;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+// NeoForge event bus listener for RenderHand removed: we rely on model-driven special renderers now.
+
+// Only client side
+@Mod(value = TradingCells.MOD_ID, dist = Dist.CLIENT)
+public class TradingCellsClient {
+
+    @SuppressWarnings("java:S1118") // Fake warning
+    public TradingCellsClient(ModContainer container) {
+        container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+        var modBus = container.getEventBus();
+        if (modBus != null) {
+            modBus.addListener(CapturerClientEvent::onRegisterSpecialModelRenderer);
+            modBus.addListener(CapturerClientEvent::onRegisterBlockEntityRenderers);
+            modBus.addListener(BreederClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(IncubatorClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(IncubatorClientRegistrationAdapter::onRegisterRenderers);
+            modBus.addListener(FarmerClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(FarmerClientRegistrationAdapter::onRegisterRenderers);
+            modBus.addListener(AutotraderClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(AutotraderClientRegistrationAdapter::onRegisterRenderers);
+            modBus.addListener(IronFarmClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(IronFarmClientRegistrationAdapter::onRegisterRenderers);
+            modBus.addListener(ConverterClientRegistrationAdapter::onRegisterMenuScreens);
+            modBus.addListener(ConverterClientRegistrationAdapter::onRegisterRenderers);
+        }
+        // RenderHand handling removed — rendering is handled by SpecialModelRenderers selected by JSON.
+    }
+}

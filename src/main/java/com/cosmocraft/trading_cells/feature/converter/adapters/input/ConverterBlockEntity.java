@@ -1,0 +1,442 @@
+package com.cosmocraft.trading_cells.feature.converter.adapters.input;
+
+import com.cosmocraft.trading_cells.feature.converter.adapters.output.ConverterRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.converter.domain.model.ConverterStage;
+import com.cosmocraft.trading_cells.feature.machines.application.MachineSettings;
+import com.cosmocraft.trading_cells.feature.incubators.adapters.input.CapturedMobStackAdapter;
+import com.cosmocraft.trading_cells.feature.incubators.domain.model.IncubatorKind;
+import com.cosmocraft.trading_cells.feature.tradecages.adapters.input.VillagerCapturerItem;
+import com.cosmocraft.trading_cells.platform.neoforge.machine.AbstractPortableMachineBlock;
+import com.cosmocraft.trading_cells.platform.neoforge.machine.PortableMachineBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.Container;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+public final class ConverterBlockEntity extends PortableMachineBlockEntity implements WorldlyContainer, MenuProvider {
+    public static final int VILLAGER_SLOT = 0;
+    public static final int FIRST_POTION_SLOT = 1;
+    public static final int POTION_SLOT_COUNT = 4;
+    public static final int FIRST_APPLE_SLOT = FIRST_POTION_SLOT + POTION_SLOT_COUNT;
+    public static final int APPLE_SLOT_COUNT = 4;
+    public static final int CONTAINER_SIZE = FIRST_APPLE_SLOT + APPLE_SLOT_COUNT;
+
+    private static final String SLOT_TAG_PREFIX = "Slot";
+    private static final String STAGE_TAG = "Stage";
+    private static final String STAGE_TICKS_TAG = "StageTicks";
+    private static final String CURED_READY_TAG = "CuredReady";
+    private static final String CURE_DISCOUNT_TAG = "TradingCellsCureDiscount";
+    private static final int[] VILLAGER_SLOTS = new int[]{VILLAGER_SLOT};
+    private static final int[] POTION_SLOTS = new int[]{1, 2, 3, 4};
+    private static final int[] APPLE_SLOTS = new int[]{5, 6, 7, 8};
+    private static final int[] NO_SLOTS = new int[0];
+
+    private final NonNullList<ItemStack> items = NonNullList.withSize(CONTAINER_SIZE, ItemStack.EMPTY);
+    private ConverterStage stage = ConverterStage.IDLE;
+    private int stageTicks;
+    private boolean curedReady;
+
+    private final ContainerData dataAccess = new ContainerData() {
+        @Override
+        public int get(int index) {
+            return switch (index) {
+                case 0 -> stage.ordinal();
+                case 1 -> stageTicks;
+                case 2 -> curedReady ? 1 : 0;
+                case 3 -> stage.durationTicks();
+                default -> 0;
+            };
+        }
+
+        @Override
+        public void set(int index, int value) {
+            if (index == 0) {
+                stage = ConverterStage.fromId(value);
+            } else if (index == 1) {
+                stageTicks = Math.max(0, value);
+            } else if (index == 2) {
+                curedReady = value != 0;
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 4;
+        }
+    };
+
+    public ConverterBlockEntity(BlockPos pos, BlockState state) {
+        super(ConverterRegistrationAdapter.CONVERTER_BLOCK_ENTITY.get(), pos, state);
+    }
+
+    public ContainerData dataAccess() {
+        return dataAccess;
+    }
+
+    public ConverterStage stage() {
+        return stage;
+    }
+
+    public int stageTicks() {
+        return stageTicks;
+    }
+
+    public boolean isProcessing() {
+        return stage.isProcessing();
+    }
+
+    public boolean hasStoredVillager() {
+        return isAdultVillager(items.get(VILLAGER_SLOT));
+    }
+
+    public ItemStack copyDisplayVillagerStack() {
+        return items.get(VILLAGER_SLOT).copy();
+    }
+
+    public InteractionResult insertVillagerFromCapturer(ItemStack stack, Player player) {
+        if (hasStoredVillager()) {
+            return InteractionResult.SUCCESS_SERVER;
+        }
+        if (!isAdultVillager(stack)) {
+            return InteractionResult.PASS;
+        }
+        items.set(VILLAGER_SLOT, stack.copyWithCount(1));
+        VillagerCapturerItem.clearCapturedVillager(stack);
+        stage = ConverterStage.IDLE;
+        stageTicks = 0;
+        curedReady = false;
+        markChangedAndSync();
+        return InteractionResult.SUCCESS_SERVER;
+    }
+
+    public InteractionResult extractVillagerToCapturer(ItemStack stack, Player player) {
+        if (isProcessing()) {
+            return InteractionResult.SUCCESS_SERVER;
+        }
+        if (!hasStoredVillager()) {
+            return InteractionResult.SUCCESS_SERVER;
+        }
+        if (VillagerCapturerItem.hasCapturedVillager(stack)) {
+            return InteractionResult.SUCCESS_SERVER;
+        }
+        CompoundTag data = VillagerCapturerItem.getCapturedVillagerData(items.get(VILLAGER_SLOT));
+        if (data == null) {
+            return InteractionResult.FAIL;
+        }
+        ItemStack target = stack.getCount() <= 1 ? stack : new ItemStack(stack.getItem());
+        VillagerCapturerItem.setCapturedVillagerData(target, data);
+        if (target != stack) {
+            stack.shrink(1);
+            if (!player.getInventory().add(target)) {
+                player.drop(target, false);
+            }
+        }
+        items.set(VILLAGER_SLOT, ItemStack.EMPTY);
+        stage = ConverterStage.IDLE;
+        stageTicks = 0;
+        curedReady = false;
+        markChangedAndSync();
+        return InteractionResult.SUCCESS_SERVER;
+    }
+
+    @Override
+    public void processTick() {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        if (!isAdultVillager(items.get(VILLAGER_SLOT))) {
+            cancelProcess();
+            return;
+        }
+
+        if (stage == ConverterStage.IDLE) {
+            if (!curedReady && hasIngredient(POTION_SLOTS, true) && hasIngredient(APPLE_SLOTS, false)) {
+                consumeIngredient(POTION_SLOTS, true);
+                consumeIngredient(APPLE_SLOTS, false);
+                stage = ConverterStage.INFECTING;
+                stageTicks = 0;
+                markChangedAndSync();
+            }
+            return;
+        }
+
+        stageTicks++;
+        if (stageTicks < stage.durationTicks()) {
+            setChanged();
+            if (stageTicks % 20 == 0) {
+                markChangedAndSync();
+            }
+            return;
+        }
+
+        if (stage == ConverterStage.INFECTING) {
+            stage = ConverterStage.CURING;
+            stageTicks = 0;
+            markChangedAndSync();
+            return;
+        }
+
+        applyCureDiscount();
+        stage = ConverterStage.IDLE;
+        stageTicks = 0;
+        curedReady = true;
+        markChangedAndSync();
+    }
+
+    @Override
+    public @NonNull Component getDisplayName() {
+        return Component.translatable("container.trading_cells.converter");
+    }
+
+    @Override
+    public @Nullable AbstractContainerMenu createMenu(int containerId, @NonNull Inventory inventory, @NonNull Player player) {
+        return new ConverterMenu(containerId, inventory, this, dataAccess);
+    }
+
+    @Override
+    public int getContainerSize() {
+        return CONTAINER_SIZE;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        for (ItemStack stack : items) {
+            if (!stack.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public @NonNull ItemStack getItem(int slot) {
+        return isValidSlot(slot) ? items.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItem(int slot, int count) {
+        if (!isValidSlot(slot) || slot == VILLAGER_SLOT && isProcessing() || count <= 0 || items.get(slot).isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot).split(count);
+        if (items.get(slot).isEmpty()) {
+            items.set(slot, ItemStack.EMPTY);
+        }
+        if (slot == VILLAGER_SLOT) {
+            curedReady = false;
+            cancelProcess();
+        }
+        markChangedAndSync();
+        return removed;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItemNoUpdate(int slot) {
+        if (!isValidSlot(slot) || slot == VILLAGER_SLOT && isProcessing()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot);
+        items.set(slot, ItemStack.EMPTY);
+        if (slot == VILLAGER_SLOT) {
+            curedReady = false;
+            cancelProcess();
+        }
+        return removed;
+    }
+
+    @Override
+    public void setItem(int slot, @NonNull ItemStack stack) {
+        if (!isValidSlot(slot)
+                || slot == VILLAGER_SLOT && isProcessing()
+                || !stack.isEmpty() && !canPlaceItem(slot, stack)) {
+            return;
+        }
+        ItemStack inserted = stack.copy();
+        if (slot == VILLAGER_SLOT) {
+            inserted.setCount(Math.min(1, inserted.getCount()));
+            curedReady = false;
+            cancelProcess();
+        } else {
+            inserted.setCount(Math.min(inserted.getMaxStackSize(), inserted.getCount()));
+        }
+        items.set(slot, inserted);
+        markChangedAndSync();
+    }
+
+    @Override
+    public boolean stillValid(@NonNull Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, @NonNull ItemStack stack) {
+        if (slot == VILLAGER_SLOT) {
+            return !isProcessing() && isAdultVillager(stack);
+        }
+        if (isPotionSlot(slot)) {
+            return ConverterIngredientAdapter.isWeaknessPotion(stack);
+        }
+        return isAppleSlot(slot) && ConverterIngredientAdapter.isGoldenApple(stack);
+    }
+
+    @Override
+    public void clearContent() {
+        clearContentsForBlockDrop();
+        markChangedAndSync();
+    }
+
+    @Override
+    public int @NonNull [] getSlotsForFace(@NonNull Direction direction) {
+        Direction facing = getBlockState().getValue(AbstractPortableMachineBlock.FACING);
+        if (direction == facing.getClockWise()) {
+            return POTION_SLOTS;
+        }
+        if (direction == facing.getCounterClockWise()) {
+            return APPLE_SLOTS;
+        }
+        return NO_SLOTS;
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, @NonNull ItemStack stack, @Nullable Direction direction) {
+        if (direction == null) {
+            return false;
+        }
+        for (int allowedSlot : getSlotsForFace(direction)) {
+            if (allowedSlot == slot) {
+                return canPlaceItem(slot, stack);
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, @NonNull ItemStack stack, @NonNull Direction direction) {
+        return false;
+    }
+
+    @Override
+    protected void loadAdditional(@NonNull ValueInput input) {
+        super.loadAdditional(input);
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            items.set(slot, input.read(SLOT_TAG_PREFIX + slot, ItemStack.CODEC).orElse(ItemStack.EMPTY));
+        }
+        stage = ConverterStage.fromId(input.getIntOr(STAGE_TAG, 0));
+        stageTicks = Math.max(0, Math.min(stage.durationTicks(), input.getIntOr(STAGE_TICKS_TAG, 0)));
+        curedReady = input.getBooleanOr(CURED_READY_TAG, false);
+    }
+
+    @Override
+    protected void saveAdditional(@NonNull ValueOutput output) {
+        super.saveAdditional(output);
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            if (!items.get(slot).isEmpty()) {
+                output.store(SLOT_TAG_PREFIX + slot, ItemStack.CODEC, items.get(slot));
+            }
+        }
+        if (stage != ConverterStage.IDLE) {
+            output.putInt(STAGE_TAG, stage.ordinal());
+            output.putInt(STAGE_TICKS_TAG, stageTicks);
+        }
+        if (curedReady) {
+            output.putBoolean(CURED_READY_TAG, true);
+        }
+    }
+
+    @Override
+    protected void clearContentsForBlockDrop() {
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            items.set(slot, ItemStack.EMPTY);
+        }
+        stage = ConverterStage.IDLE;
+        stageTicks = 0;
+        curedReady = false;
+        setChanged();
+    }
+
+    private void applyCureDiscount() {
+        if (level == null) {
+            return;
+        }
+        Villager villager = VillagerCapturerItem.createCapturedVillager(level, items.get(VILLAGER_SLOT), worldPosition);
+        if (villager == null) {
+            return;
+        }
+        int current = villager.getPersistentData().getInt(CURE_DISCOUNT_TAG).orElse(0);
+        villager.getPersistentData().putInt(
+                CURE_DISCOUNT_TAG,
+                Math.min(
+                        MachineSettings.values().converterMaximumCureDiscount(),
+                        current + MachineSettings.values().converterCureDiscountPerCycle()
+                )
+        );
+        VillagerCapturerItem.setCapturedVillagerData(
+                items.get(VILLAGER_SLOT),
+                VillagerCapturerItem.createCapturedVillagerData(villager)
+        );
+    }
+
+    private boolean hasIngredient(int[] slots, boolean potion) {
+        for (int slot : slots) {
+            ItemStack stack = items.get(slot);
+            if (potion ? ConverterIngredientAdapter.isWeaknessPotion(stack) : ConverterIngredientAdapter.isGoldenApple(stack)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void consumeIngredient(int[] slots, boolean potion) {
+        for (int slot : slots) {
+            ItemStack stack = items.get(slot);
+            if (potion ? ConverterIngredientAdapter.isWeaknessPotion(stack) : ConverterIngredientAdapter.isGoldenApple(stack)) {
+                stack.shrink(1);
+                if (stack.isEmpty()) {
+                    items.set(slot, ItemStack.EMPTY);
+                }
+                return;
+            }
+        }
+    }
+
+    private void cancelProcess() {
+        if (stage != ConverterStage.IDLE || stageTicks != 0) {
+            stage = ConverterStage.IDLE;
+            stageTicks = 0;
+            markChangedAndSync();
+        }
+    }
+
+    private static boolean isAdultVillager(ItemStack stack) {
+        return CapturedMobStackAdapter.isFilledCapturer(IncubatorKind.VILLAGER, stack)
+                && !CapturedMobStackAdapter.isBaby(IncubatorKind.VILLAGER, stack);
+    }
+
+    private static boolean isPotionSlot(int slot) {
+        return slot >= FIRST_POTION_SLOT && slot < FIRST_APPLE_SLOT;
+    }
+
+    private static boolean isAppleSlot(int slot) {
+        return slot >= FIRST_APPLE_SLOT && slot < CONTAINER_SIZE;
+    }
+
+    private static boolean isValidSlot(int slot) {
+        return slot >= 0 && slot < CONTAINER_SIZE;
+    }
+}

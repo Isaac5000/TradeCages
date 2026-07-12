@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "E": "minecraft:ender_pearl",
+    "R": "minecraft:red_stained_glass"
+  },
+  "pattern": [
+    " R ",
+    "RER",
+    " R "
+  ],
+  "result": {
+    "count": 1,
+    "id": "trading_cells:piglin_capturer"
+  }
+}

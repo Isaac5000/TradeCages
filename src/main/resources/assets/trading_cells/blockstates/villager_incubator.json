@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "trading_cells:block/villager_incubator" },
+    "facing=east": { "model": "trading_cells:block/villager_incubator", "y": 90 },
+    "facing=south": { "model": "trading_cells:block/villager_incubator", "y": 180 },
+    "facing=west": { "model": "trading_cells:block/villager_incubator", "y": 270 }
+  }
+}

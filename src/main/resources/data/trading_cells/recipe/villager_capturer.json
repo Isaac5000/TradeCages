@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "A": "minecraft:light_blue_stained_glass",
+    "E": "minecraft:ender_pearl"
+  },
+  "pattern": [
+    " A ",
+    "AEA",
+    " A "
+  ],
+  "result": {
+    "count": 1,
+    "id": "trading_cells:villager_capturer"
+  }
+}

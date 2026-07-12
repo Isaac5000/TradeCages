@@ -1,0 +1,317 @@
+package com.cosmocraft.trading_cells.feature.incubators.adapters.input;
+
+import com.cosmocraft.trading_cells.feature.incubators.adapters.output.IncubatorRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.incubators.application.port.output.IncubatorTickPort;
+import com.cosmocraft.trading_cells.feature.incubators.domain.model.IncubationCycle;
+import com.cosmocraft.trading_cells.feature.incubators.domain.model.IncubatorKind;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.Container;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+public abstract class IncubatorBlockEntity extends BlockEntity implements WorldlyContainer, MenuProvider, IncubatorTickPort {
+    public static final int INPUT_SLOT = 0;
+    public static final int OUTPUT_SLOT = 1;
+    public static final int CONTAINER_SIZE = 2;
+
+    private static final String INPUT_TAG = "Input";
+    private static final String OUTPUT_TAG = "Output";
+    private static final String INCUBATION_TICKS_TAG = "IncubationTicks";
+    private static final int[] INPUT_SLOTS = new int[]{INPUT_SLOT};
+    private static final int[] OUTPUT_SLOTS = new int[]{OUTPUT_SLOT};
+
+    private final IncubatorKind kind;
+    private final NonNullList<ItemStack> items = NonNullList.withSize(CONTAINER_SIZE, ItemStack.EMPTY);
+    private int incubationTicks;
+    private @Nullable CompoundTag preparedBlockDropData;
+
+    private final ContainerData dataAccess = new ContainerData() {
+        @Override
+        public int get(int index) {
+            return switch (index) {
+                case 0 -> incubationTicks;
+                case 1 -> IncubationCycle.ticksToAdult(kind);
+                default -> 0;
+            };
+        }
+
+        @Override
+        public void set(int index, int value) {
+            if (index == 0) {
+                incubationTicks = Math.max(0, Math.min(IncubationCycle.ticksToAdult(kind), value));
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+    };
+
+    protected IncubatorBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state, IncubatorKind kind) {
+        super(type, pos, state);
+        this.kind = kind;
+    }
+
+    public IncubatorKind kind() {
+        return kind;
+    }
+
+    public ContainerData dataAccess() {
+        return dataAccess;
+    }
+
+    public static void serverTick(Level level, BlockPos pos, BlockState state, IncubatorBlockEntity incubator) {
+        if (!level.isClientSide()) {
+            IncubatorRegistrationAdapter.TICK_INCUBATOR_USE_CASE.tick(incubator);
+        }
+    }
+
+    @Override
+    public void processIncubation() {
+        ItemStack input = items.get(INPUT_SLOT);
+        if (!CapturedMobStackAdapter.isBaby(kind, input)) {
+            resetProgressIfNeeded();
+            return;
+        }
+
+        if (!items.get(OUTPUT_SLOT).isEmpty()) {
+            return;
+        }
+
+        incubationTicks = IncubationCycle.advance(kind, incubationTicks);
+        if (!IncubationCycle.isComplete(kind, incubationTicks)) {
+            setChanged();
+            return;
+        }
+
+        ItemStack adult = CapturedMobStackAdapter.mature(kind, input);
+        if (adult.isEmpty()) {
+            incubationTicks = 0;
+            markChangedAndSync();
+            return;
+        }
+
+        items.set(INPUT_SLOT, ItemStack.EMPTY);
+        items.set(OUTPUT_SLOT, adult);
+        incubationTicks = 0;
+        markChangedAndSync();
+    }
+
+    public ItemStack copyDisplayStack() {
+        ItemStack output = items.get(OUTPUT_SLOT);
+        return (output.isEmpty() ? items.get(INPUT_SLOT) : output).copy();
+    }
+
+    public void prepareForBlockDrop(HolderLookup.Provider registries) {
+        preparedBlockDropData = saveCustomOnly(registries);
+        clearStoredContents();
+    }
+
+    public CompoundTag getPreparedBlockDropData(HolderLookup.Provider registries) {
+        return preparedBlockDropData == null ? saveCustomOnly(registries) : preparedBlockDropData.copy();
+    }
+
+    public void discardContentsAfterBlockDrop() {
+        preparedBlockDropData = null;
+        clearStoredContents();
+    }
+
+    @Override
+    public @NonNull Component getDisplayName() {
+        return Component.translatable(kind == IncubatorKind.VILLAGER
+                ? "container.trading_cells.villager_incubator"
+                : "container.trading_cells.piglin_incubator");
+    }
+
+    @Override
+    public @Nullable AbstractContainerMenu createMenu(int containerId, @NonNull Inventory inventory, @NonNull Player player) {
+        return new IncubatorMenu(kind, containerId, inventory, this, dataAccess);
+    }
+
+    @Override
+    public int getContainerSize() {
+        return CONTAINER_SIZE;
+    }
+
+    @Override
+    public int getMaxStackSize() {
+        return 1;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return items.get(INPUT_SLOT).isEmpty() && items.get(OUTPUT_SLOT).isEmpty();
+    }
+
+    @Override
+    public @NonNull ItemStack getItem(int slot) {
+        return isValidSlot(slot) ? items.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItem(int slot, int count) {
+        if (!isValidSlot(slot) || count <= 0 || items.get(slot).isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot).split(count);
+        if (items.get(slot).isEmpty()) {
+            items.set(slot, ItemStack.EMPTY);
+        }
+        if (slot == INPUT_SLOT) {
+            incubationTicks = 0;
+        }
+        markChangedAndSync();
+        return removed;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItemNoUpdate(int slot) {
+        if (!isValidSlot(slot)) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot);
+        items.set(slot, ItemStack.EMPTY);
+        if (slot == INPUT_SLOT) {
+            incubationTicks = 0;
+        }
+        return removed;
+    }
+
+    @Override
+    public void setItem(int slot, @NonNull ItemStack stack) {
+        if (slot == OUTPUT_SLOT && stack.isEmpty()) {
+            items.set(OUTPUT_SLOT, ItemStack.EMPTY);
+            markChangedAndSync();
+            return;
+        }
+        if (slot != INPUT_SLOT) {
+            return;
+        }
+        if (!stack.isEmpty() && !canPlaceItem(slot, stack)) {
+            return;
+        }
+        ItemStack inserted = stack.copy();
+        inserted.setCount(Math.min(1, inserted.getCount()));
+        items.set(INPUT_SLOT, inserted);
+        incubationTicks = 0;
+        markChangedAndSync();
+    }
+
+    @Override
+    public boolean stillValid(@NonNull Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, @NonNull ItemStack stack) {
+        return slot == INPUT_SLOT
+                && items.get(INPUT_SLOT).isEmpty()
+                && CapturedMobStackAdapter.isBaby(kind, stack);
+    }
+
+    @Override
+    public void clearContent() {
+        preparedBlockDropData = null;
+        clearStoredContents();
+        markChangedAndSync();
+    }
+
+    @Override
+    public int @NonNull [] getSlotsForFace(@NonNull Direction direction) {
+        return direction == Direction.DOWN ? OUTPUT_SLOTS : INPUT_SLOTS;
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, @NonNull ItemStack stack, @Nullable Direction direction) {
+        return direction != Direction.DOWN && canPlaceItem(slot, stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, @NonNull ItemStack stack, @NonNull Direction direction) {
+        return direction == Direction.DOWN && slot == OUTPUT_SLOT;
+    }
+
+    @Override
+    protected void loadAdditional(@NonNull ValueInput input) {
+        super.loadAdditional(input);
+        items.set(INPUT_SLOT, input.read(INPUT_TAG, ItemStack.CODEC).orElse(ItemStack.EMPTY));
+        items.set(OUTPUT_SLOT, input.read(OUTPUT_TAG, ItemStack.CODEC).orElse(ItemStack.EMPTY));
+        incubationTicks = Math.max(0, Math.min(
+                IncubationCycle.ticksToAdult(kind),
+                input.getIntOr(INCUBATION_TICKS_TAG, 0)
+        ));
+        preparedBlockDropData = null;
+    }
+
+    @Override
+    protected void saveAdditional(@NonNull ValueOutput output) {
+        super.saveAdditional(output);
+        if (!items.get(INPUT_SLOT).isEmpty()) {
+            output.store(INPUT_TAG, ItemStack.CODEC, items.get(INPUT_SLOT));
+        }
+        if (!items.get(OUTPUT_SLOT).isEmpty()) {
+            output.store(OUTPUT_TAG, ItemStack.CODEC, items.get(OUTPUT_SLOT));
+        }
+        if (incubationTicks > 0) {
+            output.putInt(INCUBATION_TICKS_TAG, incubationTicks);
+        }
+    }
+
+    @Override
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public @NonNull CompoundTag getUpdateTag(HolderLookup.@NonNull Provider registries) {
+        return saveCustomOnly(registries);
+    }
+
+    protected void markChangedAndSync() {
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+        }
+    }
+
+    private void resetProgressIfNeeded() {
+        if (incubationTicks != 0) {
+            incubationTicks = 0;
+            setChanged();
+        }
+    }
+
+    private void clearStoredContents() {
+        items.set(INPUT_SLOT, ItemStack.EMPTY);
+        items.set(OUTPUT_SLOT, ItemStack.EMPTY);
+        incubationTicks = 0;
+        setChanged();
+    }
+
+    private static boolean isValidSlot(int slot) {
+        return slot >= 0 && slot < CONTAINER_SIZE;
+    }
+}

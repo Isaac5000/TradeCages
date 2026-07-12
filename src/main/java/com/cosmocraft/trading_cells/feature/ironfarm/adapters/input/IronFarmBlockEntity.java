@@ -1,0 +1,346 @@
+package com.cosmocraft.trading_cells.feature.ironfarm.adapters.input;
+
+import com.cosmocraft.trading_cells.feature.incubators.adapters.input.CapturedMobStackAdapter;
+import com.cosmocraft.trading_cells.feature.incubators.domain.model.IncubatorKind;
+import com.cosmocraft.trading_cells.feature.ironfarm.adapters.output.IronFarmRegistrationAdapter;
+import com.cosmocraft.trading_cells.feature.ironfarm.domain.model.IronFarmCycle;
+import com.cosmocraft.trading_cells.feature.machines.application.MachineSettings;
+import com.cosmocraft.trading_cells.platform.neoforge.machine.PortableMachineBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.NonNullList;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Container;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+public final class IronFarmBlockEntity extends PortableMachineBlockEntity implements WorldlyContainer, MenuProvider {
+    public static final int FIRST_VILLAGER_SLOT = 0;
+    public static final int VILLAGER_SLOT_COUNT = 3;
+    public static final int FIRST_OUTPUT_SLOT = FIRST_VILLAGER_SLOT + VILLAGER_SLOT_COUNT;
+    public static final int OUTPUT_SLOT_COUNT = 4;
+    public static final int CONTAINER_SIZE = FIRST_OUTPUT_SLOT + OUTPUT_SLOT_COUNT;
+
+    private static final String SLOT_TAG_PREFIX = "Slot";
+    private static final String CYCLE_TICKS_TAG = "CycleTicks";
+    private static final String FLOWERS_ENABLED_TAG = "FlowersEnabled";
+    private static final int[] VILLAGER_SLOTS = new int[]{0, 1, 2};
+    private static final int[] OUTPUT_SLOTS = new int[]{3, 4, 5, 6};
+
+    private final NonNullList<ItemStack> items = NonNullList.withSize(CONTAINER_SIZE, ItemStack.EMPTY);
+    private int cycleTicks;
+    private boolean flowersEnabled = true;
+
+    private final ContainerData dataAccess = new ContainerData() {
+        @Override
+        public int get(int index) {
+            return switch (index) {
+                case 0 -> cycleTicks;
+                case 1 -> flowersEnabled ? 1 : 0;
+                case 2 -> villagerCount();
+                case 3 -> IronFarmCycle.cycleTicks();
+                case 4 -> IronFarmCycle.multiplier(villagerCount());
+                case 5 -> IronFarmCycle.multiplier(Math.min(VILLAGER_SLOT_COUNT, villagerCount() + 1));
+                case 6 -> VILLAGER_SLOT_COUNT;
+                default -> 0;
+            };
+        }
+
+        @Override
+        public void set(int index, int value) {
+            if (index == 0) {
+                cycleTicks = Math.max(0, Math.min(IronFarmCycle.cycleTicks(), value));
+            } else if (index == 1) {
+                flowersEnabled = value != 0;
+                markChangedAndSync();
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 7;
+        }
+    };
+
+    public IronFarmBlockEntity(BlockPos pos, BlockState state) {
+        super(IronFarmRegistrationAdapter.IRON_FARM_BLOCK_ENTITY.get(), pos, state);
+    }
+
+    public ContainerData dataAccess() {
+        return dataAccess;
+    }
+
+    public int cycleTicks() {
+        return cycleTicks;
+    }
+
+    @Override
+    public void processTick() {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        int multiplier = IronFarmCycle.multiplier(villagerCount());
+        if (multiplier == 0) {
+            resetProgress();
+            return;
+        }
+
+        ItemStack iron = new ItemStack(Items.IRON_INGOT, MachineSettings.values().ironFarmBaseIron() * multiplier);
+        ItemStack maximumPoppies = flowersEnabled
+                ? new ItemStack(Items.POPPY, MachineSettings.values().ironFarmMaximumPoppies() * multiplier)
+                : ItemStack.EMPTY;
+        if (!canStoreTogether(iron, maximumPoppies)) {
+            return;
+        }
+
+        cycleTicks++;
+        if (IronFarmCycle.isGolemHitTick(cycleTicks)) {
+            level.playSound(null, worldPosition, SoundEvents.IRON_GOLEM_HURT, SoundSource.BLOCKS, 0.9F, 0.9F);
+        }
+        if (cycleTicks < IronFarmCycle.cycleTicks()) {
+            setChanged();
+            if (cycleTicks % 20 == 0
+                    || IronFarmCycle.isGolemHitTick(cycleTicks)
+                    || IronFarmCycle.isRedHitFlashEnding(cycleTicks)) {
+                markChangedAndSync();
+            }
+            return;
+        }
+
+        level.playSound(null, worldPosition, SoundEvents.IRON_GOLEM_DEATH, SoundSource.BLOCKS, 1.0F, 1.0F);
+        storeOutput(iron);
+        if (flowersEnabled) {
+            int poppies = level.getRandom().nextInt(MachineSettings.values().ironFarmMaximumPoppies() + 1) * multiplier;
+            storeOutput(new ItemStack(Items.POPPY, poppies));
+        }
+        cycleTicks = 0;
+        markChangedAndSync();
+    }
+
+    @Override
+    public @NonNull Component getDisplayName() {
+        return Component.translatable("container.trading_cells.iron_farm");
+    }
+
+    @Override
+    public @Nullable AbstractContainerMenu createMenu(int containerId, @NonNull Inventory inventory, @NonNull Player player) {
+        return new IronFarmMenu(containerId, inventory, this, dataAccess);
+    }
+
+    @Override
+    public int getContainerSize() {
+        return CONTAINER_SIZE;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        for (ItemStack stack : items) {
+            if (!stack.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public @NonNull ItemStack getItem(int slot) {
+        return isValidSlot(slot) ? items.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItem(int slot, int count) {
+        if (!isValidSlot(slot) || count <= 0 || items.get(slot).isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot).split(count);
+        if (items.get(slot).isEmpty()) {
+            items.set(slot, ItemStack.EMPTY);
+        }
+        markChangedAndSync();
+        return removed;
+    }
+
+    @Override
+    public @NonNull ItemStack removeItemNoUpdate(int slot) {
+        if (!isValidSlot(slot)) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack removed = items.get(slot);
+        items.set(slot, ItemStack.EMPTY);
+        return removed;
+    }
+
+    @Override
+    public void setItem(int slot, @NonNull ItemStack stack) {
+        if (!isValidSlot(slot) || !stack.isEmpty() && !canPlaceItem(slot, stack)) {
+            return;
+        }
+        ItemStack inserted = stack.copy();
+        inserted.setCount(Math.min(1, inserted.getCount()));
+        items.set(slot, inserted);
+        markChangedAndSync();
+    }
+
+    @Override
+    public boolean stillValid(@NonNull Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, @NonNull ItemStack stack) {
+        return isVillagerSlot(slot) && isAdultVillager(stack);
+    }
+
+    @Override
+    public void clearContent() {
+        clearContentsForBlockDrop();
+        markChangedAndSync();
+    }
+
+    @Override
+    public int @NonNull [] getSlotsForFace(@NonNull Direction direction) {
+        return direction == Direction.DOWN ? OUTPUT_SLOTS : VILLAGER_SLOTS;
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, @NonNull ItemStack stack, @Nullable Direction direction) {
+        return direction != Direction.DOWN && canPlaceItem(slot, stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, @NonNull ItemStack stack, @NonNull Direction direction) {
+        return direction == Direction.DOWN && isOutputSlot(slot);
+    }
+
+    @Override
+    protected void loadAdditional(@NonNull ValueInput input) {
+        super.loadAdditional(input);
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            items.set(slot, input.read(SLOT_TAG_PREFIX + slot, ItemStack.CODEC).orElse(ItemStack.EMPTY));
+        }
+        cycleTicks = Math.max(0, Math.min(IronFarmCycle.cycleTicks(), input.getIntOr(CYCLE_TICKS_TAG, 0)));
+        flowersEnabled = input.getBooleanOr(FLOWERS_ENABLED_TAG, true);
+    }
+
+    @Override
+    protected void saveAdditional(@NonNull ValueOutput output) {
+        super.saveAdditional(output);
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            if (!items.get(slot).isEmpty()) {
+                output.store(SLOT_TAG_PREFIX + slot, ItemStack.CODEC, items.get(slot));
+            }
+        }
+        if (cycleTicks > 0) {
+            output.putInt(CYCLE_TICKS_TAG, cycleTicks);
+        }
+        output.putBoolean(FLOWERS_ENABLED_TAG, flowersEnabled);
+    }
+
+    @Override
+    protected void clearContentsForBlockDrop() {
+        for (int slot = 0; slot < CONTAINER_SIZE; slot++) {
+            items.set(slot, ItemStack.EMPTY);
+        }
+        cycleTicks = 0;
+        setChanged();
+    }
+
+    private int villagerCount() {
+        int count = 0;
+        for (int slot : VILLAGER_SLOTS) {
+            if (isAdultVillager(items.get(slot))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean canStoreTogether(ItemStack first, ItemStack second) {
+        NonNullList<ItemStack> simulated = NonNullList.withSize(OUTPUT_SLOT_COUNT, ItemStack.EMPTY);
+        for (int index = 0; index < OUTPUT_SLOT_COUNT; index++) {
+            simulated.set(index, items.get(FIRST_OUTPUT_SLOT + index).copy());
+        }
+        return merge(simulated, first) && merge(simulated, second);
+    }
+
+    private void storeOutput(ItemStack source) {
+        if (source.isEmpty()) {
+            return;
+        }
+        NonNullList<ItemStack> outputs = NonNullList.withSize(OUTPUT_SLOT_COUNT, ItemStack.EMPTY);
+        for (int index = 0; index < OUTPUT_SLOT_COUNT; index++) {
+            outputs.set(index, items.get(FIRST_OUTPUT_SLOT + index));
+        }
+        merge(outputs, source);
+        for (int index = 0; index < OUTPUT_SLOT_COUNT; index++) {
+            items.set(FIRST_OUTPUT_SLOT + index, outputs.get(index));
+        }
+    }
+
+    private static boolean merge(NonNullList<ItemStack> outputs, ItemStack source) {
+        if (source.isEmpty()) {
+            return true;
+        }
+        ItemStack remaining = source.copy();
+        for (ItemStack output : outputs) {
+            if (!output.isEmpty() && ItemStack.isSameItemSameComponents(output, remaining)) {
+                int moved = Math.min(remaining.getCount(), output.getMaxStackSize() - output.getCount());
+                output.grow(moved);
+                remaining.shrink(moved);
+                if (remaining.isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        for (int index = 0; index < outputs.size(); index++) {
+            if (outputs.get(index).isEmpty()) {
+                int moved = Math.min(remaining.getCount(), remaining.getMaxStackSize());
+                ItemStack inserted = remaining.copy();
+                inserted.setCount(moved);
+                outputs.set(index, inserted);
+                remaining.shrink(moved);
+                if (remaining.isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void resetProgress() {
+        if (cycleTicks != 0) {
+            cycleTicks = 0;
+            markChangedAndSync();
+        }
+    }
+
+    private static boolean isAdultVillager(ItemStack stack) {
+        return CapturedMobStackAdapter.isFilledCapturer(IncubatorKind.VILLAGER, stack)
+                && !CapturedMobStackAdapter.isBaby(IncubatorKind.VILLAGER, stack);
+    }
+
+    private static boolean isVillagerSlot(int slot) {
+        return slot >= FIRST_VILLAGER_SLOT && slot < FIRST_OUTPUT_SLOT;
+    }
+
+    private static boolean isOutputSlot(int slot) {
+        return slot >= FIRST_OUTPUT_SLOT && slot < CONTAINER_SIZE;
+    }
+
+    private static boolean isValidSlot(int slot) {
+        return slot >= 0 && slot < CONTAINER_SIZE;
+    }
+}

@@ -2,10 +2,10 @@
   "ambientocclusion": false,
   "render_type": "minecraft:translucent",
   "textures": {
-    "base": "minecraft:block/crimson_planks",
+    "base": "minecraft:block/nether_wart_block",
     "frame": "minecraft:block/blackstone",
     "glass": "minecraft:block/tinted_glass",
-    "particle": "minecraft:block/crimson_planks"
+    "particle": "minecraft:block/nether_wart_block"
   },
   "elements": [
     {

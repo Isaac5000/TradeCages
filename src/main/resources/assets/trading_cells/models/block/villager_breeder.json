@@ -3,7 +3,10 @@
   "render_type": "minecraft:translucent",
   "textures": {
     "base": "minecraft:block/stripped_oak_log",
-    "frame": "minecraft:block/cobblestone",
+    "base_left": "#base",
+    "base_center": "#base",
+    "base_right": "#base",
+    "frame": "minecraft:block/iron_block",
     "glass": "minecraft:block/glass",
     "particle": "minecraft:block/stripped_oak_log"
   },
@@ -147,6 +150,72 @@
         2
       ],
       "to": [
+        6,
+        2,
+        14
+      ],
+      "faces": {
+        "down": {
+          "texture": "#frame"
+        },
+        "up": {
+          "texture": "#base_right"
+        },
+        "north": {
+          "texture": "#base_right"
+        },
+        "south": {
+          "texture": "#base_right"
+        },
+        "west": {
+          "texture": "#base_right"
+        },
+        "east": {
+          "texture": "#base_right"
+        }
+      },
+      "shade": false
+    },
+    {
+      "from": [
+        6,
+        0,
+        2
+      ],
+      "to": [
+        10,
+        2,
+        14
+      ],
+      "faces": {
+        "down": {
+          "texture": "#frame"
+        },
+        "up": {
+          "texture": "#base_center"
+        },
+        "north": {
+          "texture": "#base_center"
+        },
+        "south": {
+          "texture": "#base_center"
+        },
+        "west": {
+          "texture": "#base_center"
+        },
+        "east": {
+          "texture": "#base_center"
+        }
+      },
+      "shade": false
+    },
+    {
+      "from": [
+        10,
+        0,
+        2
+      ],
+      "to": [
         14,
         2,
         14
@@ -156,19 +225,19 @@
           "texture": "#frame"
         },
         "up": {
-          "texture": "#base"
+          "texture": "#base_left"
         },
         "north": {
-          "texture": "#base"
+          "texture": "#base_left"
         },
         "south": {
-          "texture": "#base"
+          "texture": "#base_left"
         },
         "west": {
-          "texture": "#base"
+          "texture": "#base_left"
         },
         "east": {
-          "texture": "#base"
+          "texture": "#base_left"
         }
       },
       "shade": false

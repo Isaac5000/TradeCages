@@ -1,9 +1,0 @@
-{
-  "replace": false,
-  "values": [
-    "trading_cells:villager_trading_cell",
-    "trading_cells:piglin_bartering_cell",
-    "trading_cells:villager_breeder",
-    "trading_cells:piglin_breeder"
-  ]
-}

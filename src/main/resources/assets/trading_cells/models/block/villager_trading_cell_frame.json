@@ -2,10 +2,10 @@
   "ambientocclusion": true,
   "render_type": "minecraft:cutout",
   "textures": {
-    "base": "minecraft:block/oak_planks",
-    "frame": "minecraft:block/cobblestone",
+    "base": "minecraft:block/iron_block",
+    "frame": "minecraft:block/iron_block",
     "glass": "minecraft:block/glass",
-    "particle": "minecraft:block/oak_planks"
+    "particle": "minecraft:block/iron_block"
   },
   "elements": [
     {

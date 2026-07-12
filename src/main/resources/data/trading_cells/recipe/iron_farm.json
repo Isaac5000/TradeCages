@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_ingot",
+    "L": "minecraft:lava_bucket"
+  },
+  "pattern": [
+    "IGI",
+    "G G",
+    "ILI"
+  ],
+  "result": {
+    "count": 1,
+    "id": "trading_cells:iron_farm"
+  }
+}
